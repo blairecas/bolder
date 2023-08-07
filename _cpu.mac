@@ -1,0 +1,2320 @@
+	.title	CPU
+	.enabl	LC, AMA
+	.list	MEB
+	.asect
+	.=1000
+
+CmdClearScreen	  =  1.
+CmdUpdPalette	  =  2.
+CmdFixWait	  =  3.
+CmdRtiToCpu	  =  4.
+CmdSetVLines      =  5.
+CmdDrawTile       =  6.
+CmdBlackWhite     =  7.
+CmdPrintCaveStr   =  8.
+CmdPrintDiamonds  =  9.
+CmdPlaySound      = 10.
+
+VADDR  = 100000
+SCRWID = 40.
+SCRHEI = 288.
+
+VFieldAddr = 102400
+
+COBJ_SPACE 			= ^x00
+COBJ_DIRT			= ^x01
+COBJ_BRICK			= ^x02
+COBJ_MAGIC			= ^x03
+COBJ_HIDDEN_OUTBOX		= ^x04
+COBJ_OUTBOX			= ^x05
+COBJ_FRAGILE_STEEL		= ^x06
+COBJ_STEEL			= ^x07
+COBJ_FIREFLY_LEFT		= ^x08
+COBJ_FIREFLY_UP			= ^x09
+COBJ_FIREFLY_RIGHT		= ^x0A
+COBJ_FIREFLY_DOWN		= ^x0B
+COBJ_FIREFLY_LEFT_SCAN		= ^x0C
+COBJ_FIREFLY_UP_SCAN		= ^x0D
+COBJ_FIREFLY_RIGHT_SCAN		= ^x0E
+COBJ_FIREFLY_DOWN_SCAN		= ^x0F
+COBJ_BOULDER			= ^x10
+COBJ_BOULDER_SCAN		= ^x11
+COBJ_BOULDER_FALL		= ^x12
+COBJ_BOULDER_FALL_SCAN		= ^x13
+COBJ_DIAMOND			= ^x14
+COBJ_DIAMOND_SCAN		= ^x15
+COBJ_DIAMOND_FALL		= ^x16
+COBJ_DIAMOND_FALL_SCAN		= ^x17
+COBJ_EXP_SPACE_0		= ^x1B
+COBJ_EXP_SPACE_1		= ^x1C
+COBJ_EXP_SPACE_2		= ^x1D
+COBJ_EXP_SPACE_3		= ^x1E
+COBJ_EXP_SPACE_4		= ^x1F
+COBJ_EXP_DIAMOND_0		= ^x20
+COBJ_EXP_DIAMOND_1		= ^x21
+COBJ_EXP_DIAMOND_2		= ^x22
+COBJ_EXP_DIAMOND_3		= ^x23
+COBJ_EXP_DIAMOND_4		= ^x24
+COBJ_INBOX			= ^x25
+COBJ_PREROCKFORD_1		= ^x26
+COBJ_PREROCKFORD_2		= ^x27
+COBJ_PREROCKFORD_3		= ^x28
+COBJ_BUTTERFLY_DOWN		= ^x30
+COBJ_BUTTERFLY_LEFT		= ^x31
+COBJ_BUTTERFLY_UP		= ^x32
+COBJ_BUTTERFLY_RIGHT		= ^x33
+COBJ_BUTTERFLY_DOWN_SCAN 	= ^x34
+COBJ_BUTTERFLY_LEFT_SCAN 	= ^x35
+COBJ_BUTTERFLY_UP_SCAN		= ^x36
+COBJ_BUTTERFLY_RIGHT_SCAN 	= ^x37
+
+COBJ_AMOEBA			= ^x38
+COBJ_AMOEBA_SCAN		= ^x39
+COBJ_ROCKFORD			= ^x3A
+COBJ_ROCKFORD_SCAN		= ^x3B
+COBJ_ROCKFORD_RIGHT      	= ^x3C
+COBJ_ROCKFORD_RIGHT_SCAN 	= ^x3D
+COBJ_ROCKFORD_LEFT       	= ^x3E
+COBJ_ROCKFORD_LEFT_SCAN  	= ^x3F
+
+ANIMATED_BEGIN		= 16.
+COLORED_ENDS		= 12.
+
+SND_BOOM 	= 1
+SND_TICK 	= 2
+SND_BOULDER	= 3
+SND_DIAMOND 	= 4
+SND_EMERGE 	= 5
+SND_DIRT	= 6
+
+Key8		= 157670
+Key7		= 157672
+Key6		= 157674
+Key5		= 157676
+Key4		= 157700
+Key3		= 157702
+Key2		= 157704
+Key1		= 157706
+KeyK5		= 157710
+KeyK4		= 157712
+KeyK3		= 157714
+KeyK2		= 157716
+KeyK1		= 157720
+KeyStop		= 157722
+KeyUst		= 157724
+KeyShift	= 157726
+KeyEnter	= 157730
+KeySpace	= 157732
+KeyRight	= 157734
+KeyLeft		= 157736
+KeyDown		= 157740
+KeyUp		= 157742
+KeyCombo	= 157744
+KeyAny		= 157746
+KeyCurrent	= 157750
+
+PpuRtiCount2	= 157752
+PpuWaitCount	= 157754
+VSyncCount1	= 157756
+VSyncCount2	= 157760
+
+PpuR0		= 157762
+PpuR1		= 157764
+PpuR2		= 157766
+PpuR3		= 157770
+PpuR4		= 157772
+PpuR5		= 157774
+PpuCommand	= 157776
+
+Start:	mtps	#200
+	mov	#1000, SP
+
+	call	StartPPU
+
+	mov	#PPUStart, R0
+	mov	#160000-PPUStart/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+
+	clr	R0
+	mov	#207, (R0)+
+	clr	(R0)+
+	mov	#117, R3
+10$:	mov	#RtiAdr, (R0)+
+	mov	#200, (R0)+
+	sob	R3, 10$
+	mov	#1000-500/2, R3		; addrs 000500 .. 001000
+	clr	(R0)+
+	sob	R3, .-2
+
+	call	ClearScreen12
+
+	mov	#177777, PpuCommand
+	tst	PpuCommand
+	bne	.-4
+
+	mov	#VSync, @#100
+
+	mtps	#0
+	clr	CurrentMode
+
+MainCycle:
+	call	VSyncWait
+	call	CheckStop
+	call	CheckColors
+	tst	KeyUst
+	beq	10$
+	clr	KeyUst
+	com	Pause
+10$:	tst	Pause
+	bne	MainCycle
+	mov	CurrentMode, R0
+	asl	R0
+	call	@MainCycleTable(R0)
+	call	DebugInfo
+	jmp	MainCycle
+
+MainCycleTable:
+	.word	MainReset
+	.word	MainMenu
+	.word	MainPrepare
+	.word	MainPrelevel
+	.word	MainLevel
+	.word	MainLevelEnd
+
+MainReset:
+	call	WaitPpu
+	mov	#CmdClearScreen, PpuCommand
+	call	ClearScreen12
+	clr	Level
+	mov	#10., Level
+	inc	CurrentMode
+	return
+
+MainMenu:
+	inc	CurrentMode
+	return
+
+MainPrepare:
+	inc	CurrentMode
+	return
+
+MainPrelevel:
+	clr	Diamonds
+	clr	LevelCleared
+	clr	ExitOpened
+	mov	#1, AmoebaGrowing
+	clr	AmoebaCurCount
+	clr	InboxCount
+	clr	EmergingCount
+	call	FieldInit
+	call	FieldSetChanged
+	call	UpdateRockfordXYInbox
+	mov	RockfordX, NewFieldX
+	mov	RockfordY, NewFieldY
+	sub	#10., NewFieldX
+	sub	#8., NewFieldY
+	call	CorrectNewFieldXY
+	call	WaitPpu
+	mov	Level, PpuR0
+	mov	DiamondsNeeded, PpuR1
+	mov	#CmdPrintCaveStr, PpuCommand
+	call	WaitPpu
+	mov	Diamonds, PpuR0
+	mov	#CmdPrintDiamonds, PpuCommand
+	inc	CurrentMode
+	return
+
+MainLevel:
+	clr	DiamondsUpdate
+	clr	CurrentSound
+	call	ProcessField
+	call	WaitPpu
+	mov	CurrentSound, PpuR0
+	mov	#CmdPlaySound, PpuCommand
+	call	UpdateFieldXY
+	call	ScrollWindow
+	call	DrawChanged
+	tst	DiamondsUpdate
+	beq	2$
+	call	WaitPpu
+	mov	Diamonds, PpuR0
+	mov	#CmdPrintDiamonds, PpuCommand
+2$:
+	inc	NoRockford
+	cmp	NoRockford, #40.
+	ble	10$
+	dec	CurrentMode
+	br	99$
+10$:
+	tst	ExitOpened
+	bne	20$
+	cmp	Diamonds, DiamondsNeeded
+	blo	20$
+	inc	ExitOpened
+	call	WaitPpu
+	mov	#SND_EMERGE, PpuR0
+	mov	#CmdPlaySound, PpuCommand
+	call	WaitPpu
+	mov	#CmdBlackWhite, PpuCommand
+	call	WaitPpu
+20$:	tst	LevelCleared
+	beq	30$
+	clr	InboxCount
+	call	FieldSetChanged
+	inc	CurrentMode
+	br	99$
+30$:
+	tst	KeyK5
+	beq	40$
+	clr	KeyK5
+	dec	CurrentMode
+	br	99$
+40$:
+	tst	KeySpace
+	beq	99$
+	clr	KeySpace
+	clr	InboxCount
+	call	FieldSetChanged
+	inc	CurrentMode
+99$:
+	return
+
+MainLevelEnd:
+	inc	InboxCount
+	cmp	InboxCount, #22.
+	bgt	90$
+	call	ProcessFieldEndlevel
+	call	DrawChanged
+	call	GetFieldVideo
+	mov	R0, PpuR0
+	call	WaitPpu
+	mov	#CmdSetVLines, PpuCommand
+	call	WaitPpu
+	return
+90$:
+	inc	Level
+	cmp	Level, #19.
+	ble	92$
+	clr	Level
+92$:
+	mov	#03., CurrentMode
+	return
+
+PPMSG:	.word	PPARR
+        .word	177777
+
+PPARR:	.byte	0
+PPCMD:	.byte	0
+	.word	32
+PPAPP:	.word	0
+PPACP:	.word	0
+PPLEN:	.word	0
+
+PPSEN:	mov	#PPMSG, R0
+	mov	#5, R1
+	br	1$
+2$:	movb	(R0)+, @#176676
+1$:	tstb	@#176674
+	bpl	1$
+	sob	R1, 2$
+	return
+
+PPRUN:	movb	#1, PPCMD
+	mov	R5, PPLEN
+	call	PPSEN
+	movb	#20, PPCMD
+	mov	R5, PPLEN
+	mov 	R4, PPACP
+	call	PPSEN
+	movb	#30, PPCMD
+	call	PPSEN
+	return
+
+PPULoaderStart:
+	mtps	#200
+	clr	R0
+	call	@7132(R0)
+	mov	PC, R0
+	add	#10$-., R0
+	mov	#77400, R1
+	mov	#200, R3
+	mov	(R0)+, (R1)+
+	sob	R3, .-2
+	jmp	@#77400
+10$:
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	#100000, (R4)
+	clr	R0
+	mov	#37600, R3
+	mov	(R5), (R0)+
+	inc	(R4)
+	sob	R3, .-4
+	mov	#1000, SP
+	jmp	(SP)
+PPULoaderEnd:
+
+StartPPU:
+	call	SetVreg
+	mov	#100000, (R4)
+	mov	#40000, R3
+	clr	(R5)
+	inc	(R4)
+	sob	R3, .-4
+	mov	#PPUStart, R0
+	mov	#PPUEnd-PPUStart/2, R3
+	mov	#100000, (R4)
+	mov	(R0)+, (R5)
+	inc	(R4)
+	sob	R3, .-4
+	mov	#PPULoaderStart, R4
+	mov	#<PPULoaderEnd-PPULoaderStart/2>, R5
+	call	PPRUN
+	clr	PpuCommand
+	return
+
+SprNumbers45:
+	.BYTE	7,5,5,5,7,0,0,0, 2,2,2,2,2,0,0,0
+	.BYTE	7,4,7,1,7,0,0,0, 7,4,6,4,7,0,0,0
+	.BYTE	5,5,7,4,4,0,0,0, 7,1,7,4,7,0,0,0
+	.BYTE	7,1,7,5,7,0,0,0, 7,4,4,4,4,0,0,0
+	.BYTE	7,5,7,5,7,0,0,0, 7,5,7,4,7,0,0,0
+	.BYTE	160,120,120,120,160,0,0,0, 040,040,040,040,040,0,0,0
+	.BYTE	160,100,160,020,160,0,0,0, 160,100,140,100,160,0,0,0
+	.BYTE	120,120,160,100,100,0,0,0, 160,020,160,100,160,0,0,0
+	.BYTE	160,020,160,120,160,0,0,0, 160,100,100,100,100,0,0,0
+	.BYTE	160,120,160,120,160,0,0,0, 160,120,160,100,160,0,0,0
+
+PrintBinaryWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#8., R3
+20$:
+	mov	#SprNumbers45, R1
+	asl	R0
+	bcc	30$
+	add	#8., R1
+30$:	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#SCRWID*4, (R4)
+	mov	#<SprNumbers45+80.>, R1
+	asl	R0
+	bcc	40$
+	add	#8., R1
+40$:	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)
+	sob	R3, 20$
+	return
+
+PrintOctalWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#3., R3
+	clr	R1
+	br	22$
+20$:
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+22$:	asl	R0
+	rol	R1
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#SprNumbers45, R1
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#SCRWID*4, (R4)
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#<SprNumbers45+80.>, R1
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)
+	sob	R3, 20$
+	return
+
+RandSeed1:	.word	0
+RandSeed2:	.word	0
+TempRand1:	.word	0
+TempRand2:	.word	0
+
+NextRandom:
+	mov	RandSeed1, R0
+	rorb	R0
+        rorb	R0
+        bic	#^B1111111101111111, R0
+        movb	R0, TempRand1
+	mov	RandSeed2, R0
+	rorb	R0
+	bic	#^B1111111110000000, R0
+	movb	R0, TempRand2
+	movb	RandSeed2, R0
+	rorb	R0
+	rorb	R0
+	bic	#^B1111111101111111, R0
+	add	RandSeed2, R0
+	cmp	#377, R0
+	bic	#^B1111111100000000, R0
+	adc	R0
+	add	#23, R0
+	cmp	#377, R0
+	movb	R0, RandSeed2
+	mov	RandSeed1, R0
+	adc	R0
+	add	TempRand1, R0
+	cmp	#377, R0
+	adc	R0
+	add	TempRand2, R0
+	movb	R0, RandSeed1
+	return
+
+FieldInit:
+	mov	#Field, R0
+	mov	#FieldEnd-Field/2, R3
+	mov	#COBJ_STEEL, (R0)+
+	sob	R3, .-4
+	mov	Level, R0
+	asl	R0
+	mov	LevelsTable(R0), LevelAddr
+	movb	@LevelAddr, LevelColor
+	inc	LevelAddr
+	movb	@LevelAddr, DiamondsNeeded
+	inc	LevelAddr
+	clr	RandSeed1
+	movb	@LevelAddr, RandSeed2
+	inc	LevelAddr
+	mov	#Field+80., varAddr
+20$:	mov	#COBJ_DIRT, VarObject
+	call	NextRandom
+	mov	RandSeed1, R1
+	mov	LevelAddr, R5
+	mov	R5, R0
+	add	#4., R0
+	mov	#4., R3
+30$:	cmpb	R1, (R0)+
+	bhis	40$
+	movb	(R5), VarObject
+40$:	inc	R5
+	sob	R3, 30$
+	mov	VarObject, @varAddr
+	add	#2, varAddr
+	cmp	varAddr, #FieldEnd-80.
+	blo	20$
+	mov	#Field+80., R0
+	mov	#20., R3
+50$:	mov	#COBJ_STEEL, (R0)
+	add	#78., R0
+	mov	#COBJ_STEEL, (R0)+
+	sob	R3, 50$
+	add	#8., LevelAddr
+FieldCommands:
+	call	ClearTempVars
+10$:
+	movb	@LevelAddr, varObject
+	cmp	varObject, #377
+	beq	99$
+	mov	varObject, varCmd
+	bic	#^B1111111111000000, varObject
+	bic	#^B1111111100111111, varCmd
+	inc	LevelAddr
+	movb	@LevelAddr, varX
+	inc	LevelAddr
+	movb	@LevelAddr, varY
+	inc	LevelAddr
+	cmp	#^B00000000, varCmd
+	bne	20$
+	call	PutObject
+	br	10$
+20$:
+	cmp	#^B01000000, varCmd
+	bne	30$
+	movb	@LevelAddr, varLength
+	inc	LevelAddr
+	movb	@LevelAddr, varDir
+	inc	LevelAddr
+	call	PutLine
+	br	10$
+30$:
+	cmp	#^B10000000, varCmd
+	bne	40$
+	movb	@LevelAddr, varDx
+	inc	LevelAddr
+	movb	@LevelAddr, varDy
+	inc	LevelAddr
+	movb	@LevelAddr, varFill
+	inc	LevelAddr
+	call	PutFilledRect
+	br	10$
+40$:
+	cmp	#^B11000000, varCmd
+	bne	99$
+	movb	@LevelAddr, varDx
+	inc	LevelAddr
+	movb	@LevelAddr, varDy
+	inc	LevelAddr
+	call	PutRectangle
+	br	10$
+99$:	return
+
+PutCoordsR0:
+	mov	varX, R0
+	asl	R0
+	mov	varY, R1
+	mul	#80., R1
+	add	R1, R0
+	add	#Field, R0
+	return
+
+PutObject:
+	call	PutCoordsR0
+	mov	varObject, (R0)
+	return
+
+tmpLineDirDX:	.word	0, 2, 2, 2, 0, -2, -2, -2
+tmpLineDirDY:	.word	-80., -80., 0, 80., 80., 80., 0, -80.
+
+PutLine:
+	call	PutCoordsR0
+	mov	varDir, R1
+	asl	R1
+	mov	tmpLineDirDX(R1), R4
+	mov	tmpLineDirDY(R1), R5
+	mov	varLength, R3
+10$:	mov	varObject, (R0)
+	add	R4, R0
+	add	R5, R0
+	sob	R3, 10$
+	return
+
+PutRectangle:
+	mov	#2., varDir
+	mov	varDx, varLength
+	call	PutLine
+	add	varDy, varY
+	dec	varY
+	call	PutLine
+	clr	varDir
+	mov	varDy, varLength
+	call	PutLine
+	add	varDx, varX
+	dec	varX
+	call	PutLine
+	return
+
+PutFilledRect:
+	mov	varDx, R4
+	sub	#2, R4
+	asl	R4
+	mov	#80., R5
+	sub	R4, R5
+	call	PutCoordsR0
+	add	#82., R0
+	mov	varDy, R3
+	dec	R3
+	dec	R3
+10$:	mov	varDx, R2
+	dec	R2
+	dec	R2
+20$:	mov	varFill, (R0)+
+	sob	R2, 20$
+	add	R5, R0
+	sob	R3, 10$
+	call	PutRectangle
+	return
+
+FieldSetChanged:
+	mov	#Field, R0
+	mov	#FieldEnd-Field/2, R3
+	bis	#100000, (R0)+
+	sob	R3, .-4
+	return
+
+GetFieldVideo:
+	mov	FieldX, R0
+	add	#VFieldAddr, R0
+	mov	FieldY, R1
+	mul	#SCRWID*16., R1
+	add	R1, R0
+	return
+
+GetFieldAddr:
+	mov	FieldX, R0
+	asl	R0
+	mov	FieldY, R1
+	mul	#80., R1
+	add	R1, R0
+	add	#Field, R0
+	return
+
+DrawChanged:
+	call	SetVreg
+	call	GetFieldVideo
+	mov	R0, -(SP)
+	call	GetFieldAddr
+	mov	#SCRWID, R2
+	mov	#16., TempR3
+10$:	mov	(SP), (R4)
+	mov	#20., R3
+20$:	mov	(R0), R1
+	bit	#100000, R1
+	beq	30$
+	bic	#^B1111111111000000, R1
+	asl	R1
+	mov	ObjectBaseTiles(R1), R1
+	beq	28$
+	cmp	R1, #COLORED_ENDS
+	bhi	26$
+	add	LevelColor, R1
+26$:	cmp	R1, #ANIMATED_BEGIN
+	blo	28$
+	bic	#^B11, R1
+	bis	AniCounter, R1
+28$:
+	call	WaitPpu
+	mov	(R4), PpuR0
+	mov	R1, PpuR1
+	mov	#CmdDrawTile, PpuCommand
+	ash	#5., R1
+	add	#TilesCpuData, R1
+	.rept	16.
+	mov	(R1)+, (R5)
+	add	R2, (R4)
+	.endr
+	sub	#SCRWID*16., (R4)
+	bic	#100000, (R0)
+30$:
+	inc	(R4)
+	add	#2, R0
+	dec	R3
+	beq	40$
+	jmp	20$
+40$:
+	add	#40., R0
+	add	#SCRWID*16., (SP)
+	dec	TempR3
+	beq	99$
+	jmp	10$
+99$:	tst	(SP)+
+	return
+
+UpdateFieldXY:
+	mov	RockfordX, R1
+	mov	RockfordY, R2
+	mov	R1, R3
+	sub	FieldX, R3
+	cmp	R3, #4.
+	blt	10$
+	cmp	R3, #15.
+	bgt	10$
+	br	20$
+10$:	sub	#10., R1
+	mov	R1, NewFieldX
+20$:
+	mov	R2, R3
+	sub	FieldY, R3
+	cmp	R3, #3.
+	blt	30$
+	cmp	R3, #13.
+	bgt	30$
+	br	50$
+30$:	sub	#8., R2
+	mov	R2, NewFieldY
+50$:	call	CorrectNewFieldXY
+	return
+
+CorrectNewFieldXY:
+	tst	NewFieldX
+	bge	10$
+	clr	NewFieldX
+10$:	cmp	NewFieldX, #20.
+	ble	20$
+	mov	#20., NewFieldX
+20$:	tst	NewFieldY
+	bge	30$
+	clr	NewFieldY
+30$:	cmp	NewFieldY, #6.
+	ble	40$
+	mov	#6., NewFieldY
+40$:	return
+
+RedrawScreen:
+	call	DrawChanged
+	call	GetFieldVideo
+	mov	R0, PpuR0
+	call	WaitPpu
+	mov	#CmdSetVLines, PpuCommand
+	call	WaitPpu
+	return
+
+ScrollWindow:
+	clr	R0
+	cmp	FieldX, NewFieldX
+	beq	20$
+	blt	10$
+	dec	FieldX
+	inc	R0
+	br	20$
+10$:	inc	FieldX
+	inc	R0
+20$:	cmp	FieldY, NewFieldY
+	beq	40$
+	blt	30$
+	dec	FieldY
+	inc	R0
+	br	40$
+30$:	inc	FieldY
+	inc	R0
+40$:	tst	R0
+	beq	99$
+	call	VSyncWait2
+	call	RedrawScreen
+	br	ScrollWindow
+99$:	return
+
+UpdateRockfordXYInbox:
+	clr	RockfordX
+	clr	RockfordY
+	mov	#Field, R4
+	mov	#FieldEnd-Field/2, R3
+10$:	cmpb	(R4), #COBJ_INBOX
+	beq	20$
+	inc	R4
+	inc	R4
+	sob	R3, 10$
+	return
+20$:	call	UpdateRockfordXY
+	return
+
+ObjectBaseTiles:
+	.radix	10
+	.word	 0,  4,  7, 20,  1, 44,  1,  1, 24, 24, 24, 24, 24, 24, 24, 24
+	.word	10, 10, 10, 10, 16, 16, 16, 16,  0,  0,  0, 13, 13, 14, 15, 13
+	.word	13, 13, 14, 15, 18, 44, 13, 14, 15,  0,  0,  0,  0,  0,  0,  0
+	.word	28, 28, 28, 28, 28, 28, 28, 28, 48, 48, 32, 32, 36, 36, 40, 40
+	.radix	8
+
+ObjFromScanned:
+	.word	^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x08, ^x09, ^x0a, ^x0b
+	.word	^x00, ^x10, ^x00, ^x12,   ^x00, ^x14, ^x00, ^x16,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00
+	.word	^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00
+	.word	^x00, ^x00, ^x00, ^x00,   ^x30, ^x31, ^x32, ^x33,   ^x00, ^x38, ^x00, ^x3A,   ^x00, ^x3C, ^x00, ^x3E
+
+FromLeftClockwise:
+	.word	-2., -80., +2., +80.
+FromDownClockwise:
+	.word	+80., -2., -80., +2.
+
+ProcessTable:
+	0, 			0, 			0, 			ProcessMagicWall
+	ProcessHiddenOutbox, 	ProcessInAndOutBoxes,  	0,			0
+	ProcessFirefly,   	ProcessFirefly,   	ProcessFirefly,   	ProcessFirefly
+	0, 			0, 			0, 			0
+	ProcessStationaryBoulder,   	0,   		ProcessFallingBoulder,  0
+	ProcessStationaryDiamond,   	0,	   	ProcessFallingDiamond, 	0
+	0,		   	0,		   	0,		   	ProcessExplosionSpace
+	ProcessExplosionSpace, 	ProcessExplosionSpace, 	ProcessExplosionSpace, 	ProcessExplosionSpace
+   	ProcessExplosionDia,   	ProcessExplosionDia,   	ProcessExplosionDia,   	ProcessExplosionDia
+   	ProcessExplosionDia,   	ProcessInAndOutBoxes,  	ProcessRockfordAppear,	ProcessRockfordAppear
+	ProcessRockfordAppear,	0,			0,			0
+	0,		   	0,		   	0,		   	0
+	ProcessButterfly,   	ProcessButterfly,   	ProcessButterfly,   	ProcessButterfly
+	0, 			0, 			0, 			0
+	ProcessAmoeba,   	0,   			ProcessRockford,   	0
+	ProcessRockford,	0,			ProcessRockford, 	0
+
+ProcessField:
+	mov	AmoebaCurCount, AmoebaCount
+	clr	AmoebaCurCount
+	mov	AmoebaGrowing, AmoebaCanGrow
+	clr	AmoebaGrowing
+	mov	#Field+82., R5
+10$:	mov	(R5), R0
+	bic	#^B1111111111000000, R0
+	beq	20$
+	asl	R0
+	mov	ProcessTable(R0), R0
+	beq	20$
+	call	(R0)
+20$:
+	mov	-82.(R5), R0
+	bic	#^B1111111111000000, R0
+	beq	30$
+	asl	R0
+	mov	ObjFromScanned(R0), R0
+	beq	30$
+	movb	R0, -82.(R5)
+30$:
+	inc	R5
+	inc	R5
+	cmp	R5, #FieldEnd
+	blo	10$
+	return
+
+ProcessFieldEndlevel:
+	mov	#50., R5
+	clr	R4
+2$:	call	Random
+	ash	#-6., R0
+	bic	#^B1111110000000000, R0
+	cmp	R0, #880.
+	blt	4$
+	sub	#880., R0
+4$:	asl	R0
+	bit	#100000, Field(R0)
+	bne	6$
+	inc	R4
+6$:	mov	#COBJ_STEEL+100000, Field(R0)
+	dec	R5
+	beq	8$
+	cmp	R4, #14.
+	blo	2$
+8$:
+	mov	#Field+82., R5
+10$:
+	mov	(R5), R0
+	bic	#^B1111111111000000, R0
+	asl	R0
+	mov	ObjectBaseTiles(R0), R0
+	cmp	R0, #ANIMATED_BEGIN
+	blo	20$
+	bis	#100000, (R5)
+20$:	inc	R5
+	inc	R5
+	cmp	R5, #FieldEnd-82.
+	blo	10$
+	cmp	FieldX, #0
+	beq	30$
+	dec	FieldX
+30$:	cmp	FieldY, #0
+	beq	40$
+	dec	FieldY
+40$:
+	return
+
+ProcessInAndOutBoxes:
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:
+	cmpb	(R5), #COBJ_INBOX
+	bne	99$
+	clr	NoRockford
+	inc	InboxCount
+	cmp	InboxCount, #^B11000
+	blt	99$
+	mov	#COBJ_PREROCKFORD_1+100000, (R5)
+	mov	#SND_EMERGE, CurrentSound
+99$:	return
+
+ProcessHiddenOutbox:
+	tst	ExitOpened
+	beq	99$
+	mov	#COBJ_OUTBOX+100000, (R5)
+99$:	return
+
+ProcessMagicWall:
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:	return
+
+ProcessFirefly:
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	movb	2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	2$
+	jmp	ExplodeCurrent
+2$:	movb	80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	3$
+	jmp	ExplodeCurrent
+3$:	movb	-2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	4$
+	jmp	ExplodeCurrent
+4$:	movb	-80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	5$
+	jmp	ExplodeCurrent
+5$:
+	mov	(R5), R0
+	bic	#^B1111111111111100, R0
+	asl	R0
+	mov	R5, R4
+	add	FromDownClockwise(R0), R4
+	tstb	(R4)
+	bne	20$
+	asr	R0
+	add	#3, R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_FIREFLY_LEFT_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)
+	br	90$
+20$:
+	mov	R5, R4
+	add	FromLeftClockwise(R0), R4
+	tstb	(R4)
+	bne	30$
+	asr	R0
+	add	#COBJ_FIREFLY_LEFT_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)
+	br	90$
+30$:
+	asr	R0
+	inc	R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_FIREFLY_LEFT_SCAN+100000, R0
+	mov	R0, (R5)
+90$:	return
+
+ProcessButterfly:
+	mov	#COBJ_EXP_DIAMOND_1+100000, R0
+	movb	2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	2$
+	jmp	ExplodeCurrent
+2$:	movb	80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	3$
+	jmp	ExplodeCurrent
+3$:	movb	-2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	4$
+	jmp	ExplodeCurrent
+4$:	movb	-80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	5$
+	jmp	ExplodeCurrent
+5$:
+	mov	(R5), R0
+	bic	#^B1111111111111100, R0
+	asl	R0
+	mov	R5, R4
+	add	FromLeftClockwise(R0), R4
+	tstb	(R4)
+	bne	20$
+	asr	R0
+	inc	R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_BUTTERFLY_DOWN_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)
+	br	90$
+20$:
+	mov	R5, R4
+	add	FromDownClockwise(R0), R4
+	tstb	(R4)
+	bne	30$
+	asr	R0
+	add	#COBJ_BUTTERFLY_DOWN_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)
+	br	90$
+30$:
+	asr	R0
+	add	#3, R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_BUTTERFLY_DOWN_SCAN+100000, R0
+	mov	R0, (R5)
+90$:	return
+
+ProcessStationaryBoulder:
+	tstb	80.(R5)
+	bne	ProcessSlipperyBoulder
+	mov	#100000, (R5)
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, 80.(R5)
+	return
+
+ProcessFallingBoulder:
+	movb	80.(R5), R0
+	bne	10$
+	mov	#100000, (R5)
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, 80.(R5)
+	return
+10$:	mov	#SND_BOULDER, CurrentSound
+	cmp	R0, #COBJ_ROCKFORD
+	blt	20$
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+20$:
+	cmp	R0, #COBJ_MAGIC
+	bne	30$
+	mov	#100000, (R5)
+	tstb	160.(R5)
+	beq	25$
+	return
+25$:	mov	#COBJ_DIAMOND_SCAN+100000, 160.(R5)
+	return
+30$:
+	bic	#^B111, R0
+	cmp	R0, #COBJ_FIREFLY_LEFT
+	bne	40$
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+40$:
+	cmp	R0, #COBJ_BUTTERFLY_DOWN
+	bne	ProcessSlipperyBoulder
+	mov	#COBJ_EXP_DIAMOND_1+100000, R0
+	jmp	ExplodeBelow
+
+ProcessSlipperyBoulder:
+	cmpb	80.(R5), #COBJ_BOULDER
+	beq	50$
+	cmpb	80.(R5), #COBJ_DIAMOND
+	beq	50$
+	cmpb	80.(R5), #COBJ_BRICK
+	beq	50$
+20$:	movb	#COBJ_BOULDER_SCAN, (R5)
+	return
+50$:
+	tstb	-2(R5)
+	bne	60$
+	tstb	78.(R5)
+	bne	60$
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, -2(R5)
+	mov	#100000, (R5)
+	return
+60$:
+	tstb	2(R5)
+	bne	20$
+	tstb	82.(R5)
+	bne	20$
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, 2(R5)
+	mov	#100000, (R5)
+	return
+
+ProcessStationaryDiamond:
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:
+	tstb	80.(R5)
+	bne	ProcessSlipperyDiamond
+	mov	#100000, (R5)
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, 80.(R5)
+	return
+
+ProcessFallingDiamond:
+	movb	80.(R5), R0
+	bne	10$
+	mov	#100000, (R5)
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, 80.(R5)
+	return
+10$:	mov	#SND_DIAMOND, CurrentSound
+	cmp	R0, #COBJ_ROCKFORD
+	blt	20$
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+20$:
+	cmp	R0, #COBJ_MAGIC
+	bne	30$
+	mov	#100000, (R5)
+	tstb	160.(R5)
+	beq	25$
+	return
+25$:	mov	#COBJ_BOULDER_SCAN+100000, 160.(R5)
+	return
+30$:
+	bic	#^B111, R0
+	cmp	R0, #COBJ_FIREFLY_LEFT
+	bne	40$
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+40$:
+	cmp	R0, #COBJ_BUTTERFLY_DOWN
+	bne	ProcessSlipperyDiamond
+	mov	#COBJ_EXP_DIAMOND_1+100000, R0
+	jmp	ExplodeBelow
+
+ProcessSlipperyDiamond:
+	movb	80.(R5), R0
+	cmpb	R0, #COBJ_BOULDER
+	beq	50$
+	cmpb	R0, #COBJ_DIAMOND
+	beq	50$
+	cmpb	R0, #COBJ_BRICK
+	beq	50$
+10$:
+	movb	#COBJ_DIAMOND_SCAN, (R5)
+	return
+50$:
+	tstb	-2(R5)
+	bne	60$
+	tstb	78.(R5)
+	bne	60$
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, -2(R5)
+	mov	#100000, (R5)
+	return
+60$:
+	tstb	2(R5)
+	bne	10$
+	tstb	82.(R5)
+	bne	10$
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, 2(R5)
+	mov	#100000, (R5)
+	return
+
+ProcessExplosionSpace:
+	movb	(R5), R0
+	inc	R0
+	cmp	R0, #COBJ_EXP_SPACE_4
+	bgt	10$
+	bis	#100000, R0
+	mov	R0, (R5)
+	return
+10$:	mov	#100000, (R5)
+	return
+
+ProcessExplosionDia:
+	movb	(R5), R0
+	inc	R0
+	cmp	R0, #COBJ_EXP_DIAMOND_4
+	bgt	10$
+	bis	#100000, R0
+	mov	R0, (R5)
+	return
+10$:	mov	#COBJ_DIAMOND+100000, (R5)
+	return
+
+ProcessRockfordAppear:
+	incb	(R5)
+	bis	#100000, (R5)
+	cmpb	(R5), #COBJ_PREROCKFORD_3+1
+	blt	99$
+	mov	#COBJ_ROCKFORD+100000, (R5)
+99$:	return
+
+ProcessRockford:
+	clr	NoRockford
+	mov	#COBJ_ROCKFORD_SCAN, (R5)
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:
+	tst	KeyRight
+	beq	20$
+	mov	#+2., RockfordDir
+	call	ProcessRockfordDir
+	return
+20$:
+	tst	KeyLeft
+	beq	30$
+	mov	#-2., RockfordDir
+	call	ProcessRockfordDir
+	return
+30$:
+	tst	KeyDown
+	beq	40$
+	mov	#+80., RockfordDir
+	call	ProcessRockfordDir
+	return
+40$:
+	tst	KeyUp
+	beq	50$
+	mov	#-80., RockfordDir
+	call	ProcessRockfordDir
+	return
+50$:	clr	BoulderMoving
+	mov	R5, R4
+	call	UpdateRockfordXY
+	return
+
+ProcessRockfordDir:
+	mov	R5, R4
+	add	RockfordDir, R4
+	movb	(R4), R0
+	bne	2$
+	tst	KeyShift
+	bne	90$
+	mov	#SND_TICK, CurrentSound
+	br	90$
+2$:	cmp	R0, #COBJ_DIRT
+	bne	10$
+	mov	#SND_DIRT, CurrentSound
+	br	90$
+10$:	cmp	R0, #COBJ_DIAMOND
+	beq	20$
+	cmp	R0, #COBJ_DIAMOND_SCAN
+	beq	20$
+	cmp	R0, #COBJ_OUTBOX
+	beq	30$
+	cmp	R0, #COBJ_BOULDER
+	beq	12$
+	cmp	R0, #COBJ_BOULDER_SCAN
+	beq	12$
+	br	18$
+12$:
+	mov	RockfordDir, R1
+	cmp	R1, #+2
+	bgt	18$
+	cmp	R1, #-2
+	blt	18$
+	cmp	BoulderMoving, #3
+	bge	14$
+	inc	BoulderMoving
+	br	18$
+14$:	clr	BoulderMoving
+	mov	R4, R3
+	add	RockfordDir, R3
+	tstb	(R3)
+	bne	18$
+	mov	#COBJ_BOULDER_SCAN+100000, (R3)
+	mov	#100000, (R4)
+	br	90$
+18$:	mov	R5, R4
+	br	90$
+20$:
+	mov	#SND_DIAMOND, CurrentSound
+	inc	Diamonds
+	inc	DiamondsUpdate
+	br	90$
+30$:
+	inc	LevelCleared
+90$:
+	mov	#COBJ_ROCKFORD_RIGHT_SCAN+100000, R0
+	cmp	RockfordDir, #-2
+	bne	91$
+	mov	#COBJ_ROCKFORD_LEFT_SCAN+100000, R0
+91$:
+	tst	KeyShift
+	beq	92$
+	mov	#100000, (R4)
+	mov	R0, (R5)
+	br	99$
+92$:	mov	#100000, (R5)
+	mov	R0, (R4)
+	call	UpdateRockfordXY
+99$:	return
+
+UpdateRockfordXY:
+	clr	R0
+	mov	R4, R1
+	sub	#Field, R1
+	div	#80., R0
+	asr	R1
+	mov	R1, RockfordX
+	mov	R0, RockfordY
+	return
+
+AmoebaGrowDir:	.word	+2., -80., -2., +80.
+
+ProcessAmoeba:
+	tst	AmoebaCanGrow
+	bne	10$
+	cmp	AmoebaCount, #200.
+	bge	2$
+	mov	#COBJ_DIAMOND_SCAN+100000, (R5)
+	return
+2$:	mov	#COBJ_BOULDER_SCAN+100000, (R5)
+	return
+10$:
+	tst	Animation
+	beq	20$
+	bis	#100000, (R5)
+20$:	inc	AmoebaCurCount
+	cmpb	2(R5), #1
+	blos	30$
+	cmpb	80.(R5), #1
+	blos	30$
+	cmpb	-2(R5), #1
+	blos	30$
+	cmpb	-80.(R5), #1
+	blos	30$
+	return
+30$:	inc	AmoebaGrowing
+	call	Random
+	cmp	R0, #176000
+	bhis	40$
+	return
+40$:	bic	#^B1111111111111100, R0
+	asl	R0
+	mov	AmoebaGrowDir(R0), R0
+	add	R5, R0
+	cmpb	(R0), #1
+	blos	90$
+	return
+90$:	mov	#COBJ_AMOEBA_SCAN+100000, (R0)
+	return
+
+ExplodeBelow:
+	mov	#SND_BOOM, CurrentSound
+	cmpb	-2(R5), #COBJ_STEEL
+	beq	10$
+	mov	R0, -2(R5)
+10$:
+	cmpb	(R5), #COBJ_STEEL
+	beq	20$
+	mov	R0, (R5)
+20$:
+	dec	R0
+	cmpb	2(R5), #COBJ_STEEL
+	beq	30$
+	mov	R0, 2(R5)
+30$:
+	cmpb	78.(R5), #COBJ_STEEL
+	beq	40$
+	mov	R0, 78.(R5)
+40$:
+	cmpb	80.(R5), #COBJ_STEEL
+	beq	50$
+	mov	R0, 80.(R5)
+50$:
+	cmpb	82.(R5), #COBJ_STEEL
+	beq	60$
+	mov	R0, 82.(R5)
+60$:
+	cmpb	158.(R5), #COBJ_STEEL
+	beq	70$
+	mov	R0, 158.(R5)
+70$:
+	cmpb	160.(R5), #COBJ_STEEL
+	beq	80$
+	mov	R0, 160.(R5)
+80$:
+	cmpb	162.(R5), #COBJ_STEEL
+	beq	90$
+	mov	R0, 162.(R5)
+90$:
+	return
+
+ExplodeCurrent:
+	mov	#SND_BOOM, CurrentSound
+	cmpb	-82.(R5), #COBJ_STEEL
+	beq	10$
+	mov	R0, -82.(R5)
+10$:
+	cmpb	-80.(R5), #COBJ_STEEL
+	beq	20$
+	mov	R0, -80.(R5)
+20$:
+	cmpb	-78.(R5), #COBJ_STEEL
+	beq	30$
+	mov	R0, -78.(R5)
+30$:
+	cmpb	-2.(R5), #COBJ_STEEL
+	beq	40$
+	mov	R0, -2.(R5)
+40$:
+	cmpb	(R5), #COBJ_STEEL
+	beq	50$
+	mov	R0, (R5)
+50$:
+	dec	R0
+	cmpb	2(R5), #COBJ_STEEL
+	beq	60$
+	mov	R0, 2(R5)
+60$:
+	cmpb	78.(R5), #COBJ_STEEL
+	beq	70$
+	mov	R0, 78.(R5)
+70$:
+	cmpb	80.(R5), #COBJ_STEEL
+	beq	80$
+	mov	R0, 80.(R5)
+80$:
+	cmpb	82.(R5), #COBJ_STEEL
+	beq	90$
+	mov	R0, 82.(R5)
+90$:
+	return
+
+RtiAdr:	inc	(PC)+
+RtiCnt:	.word	0
+	rti
+
+VSync:	inc	VSyncCount1
+	inc	VSyncCount2
+	rti
+
+VSyncWait:
+	clr	R0
+VSyncWait1:
+	inc	R0
+	cmp	VSyncCount1, (PC)+
+VSyncX:	.word	6.
+	blo	VSyncWait1
+	clr	VSyncCount1
+	mov	R0, CpuWaitCount
+	call	WaitPpu
+	mov	#CmdFixWait, PpuCommand
+	inc	FrameCount
+	bit	#^B11, FrameCount
+	clr	Animation
+	bne	10$
+	inc	Animation
+	inc	AniCounter
+	bic	#^B1111111111111100, AniCounter
+10$:
+	return
+
+VSyncWait2:
+10$:	tst	VSyncCount1
+	beq	10$
+	clr	VSyncCount1
+20$:	tst	VSyncCount1
+	beq	20$
+	clr	VSyncCount1
+	return
+
+SetVreg:
+	mov	#176640, R4
+	mov	#176642, R5
+	return
+
+WaitPpu:
+	tst	PpuCommand
+	bne	WaitPpu
+	return
+
+Random:	clc
+	ror	(PC)+
+Lfsr00:	.word	126341
+	bcc	Lfsr03
+	mov	(PC)+, R0
+Lfsr01:	.word	132000
+	xor	R0, Lfsr00
+Lfsr03:	mov	Lfsr00, R0
+	return
+
+CheckStop:
+	tst	KeyStop
+	beq	99$
+	clr	KeyStop
+	clr	Pause
+	clr	CurrentMode
+99$:	return
+
+DebugInfo:
+	tst	DebugMode
+	beq	99$
+	bit	#^B1111, FrameCount
+	bne	99$
+	mov	#SCRWID+1+VADDR, R1
+	mov	KeyCurrent, R0
+	call	PrintBinaryWord
+	mov	#SCRWID+10.+VADDR, R1
+	mov	CpuWaitCount, R0
+	call	PrintOctalWord
+	mov	#SCRWID+14.+VADDR, R1
+	mov	PpuWaitCount, R0
+	call	PrintOctalWord
+99$:	return
+
+CheckColors:
+	tst	KeyK1
+	beq	99$
+	clr	KeyK1
+	call	WaitPpu
+	com	RgbMode
+	bne	20$
+	mov	#^B1101110010011000, PpuR0
+	mov	#^B1111111010111010, PpuR1
+	mov	#^B0000000000010000, PpuR2
+	mov	#^B0000000000100111, PpuR3
+	br	90$
+20$:	mov	#^B1011101010011000, PpuR0
+	mov	#^B1111111011011100, PpuR1
+	mov	#^B0000000000010000, PpuR2
+	mov	#^B0000000000100111, PpuR3
+90$:	mov	#CmdUpdPalette, PpuCommand
+99$:	return
+
+ClearTempVars:
+	mov	#tempVarsStart, R0
+	mov	#tempVarsEnd-tempVarsStart/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	return
+
+ClearScreen12:
+	call	SetVreg
+	mov	#100000, (R4)
+	mov	#40000, R3
+	clr	(R5)
+	inc	(R4)
+	sob	R3, .-4
+	return
+
+CurrentMode:		.word	0
+DebugMode:		.word	177777
+RgbMode:		.word	0
+CpuWaitCount:		.word	0
+FrameCount:		.word	0
+Pause:			.word	0
+
+Level:			.word	0
+LevelAddr:		.word	0
+LevelColor:		.word	0
+LevelCleared:		.word	0
+DiamondsNeeded:		.word	0
+Diamonds:		.word	0
+DiamondsUpdate:		.word	0
+ExitOpened:		.word	0
+
+FieldX:			.word	0
+FieldY:			.word	0
+NewFieldX:		.word	0
+NewFieldY:		.word	0
+
+Animation:		.word	0
+AniCounter:		.word	0
+InboxCount:		.word	0
+EmergingCount:		.word	0
+
+NoRockford:		.word	0
+RockfordX:		.word	0
+RockfordY:		.word	0
+RockfordDir:		.word	0
+BoulderMoving:		.word	0
+
+AmoebaCount:		.word	0
+AmoebaCurCount:		.word	0
+AmoebaCanGrow:		.word	0
+AmoebaGrowing:		.word	0
+
+CurrentSound:		.word	0
+
+tempVarsStart:
+
+varAddr:		.word	0
+varObject:		.word	0
+varCmd:			.word	0
+varX:			.word	0
+varY:			.word	0
+varDx:			.word	0
+varDy:			.word	0
+varLength:		.word	0
+varDir:			.word	0
+varFill:		.word	0
+
+tempR0:			.word	0
+tempR1:			.word	0
+tempR2:			.word	0
+tempR3:			.word	0
+tempR4:			.word	0
+tempR5:			.word	0
+
+tempVarsEnd:
+
+LevelsTable:
+	.word	LevelData0,  LevelData1,  LevelData2,  LevelData3,  LevelData16
+	.word	LevelData4,  LevelData5,  LevelData6,  LevelData7,  LevelData17
+	.word	LevelData8,  LevelData9,  LevelData10, LevelData11, LevelData18
+	.word	LevelData12, LevelData13, LevelData14, LevelData15, LevelData19
+
+LevelData0:
+	.byte	0, 14, 12
+	.byte	0, 20, 24, 0
+	.byte	74, 62, 11, 0
+	.byte	102, 1, 7, 36, 2, 102, 11, 16, 36, 2, 45, 3, 2, 4, 46, 20
+	.byte	377
+
+LevelData1:
+	.byte	1, 12, 3
+	.byte	0, 20, 24, 10
+	.byte	74, 62, 11, 2
+	.byte	102, 1, 6, 46, 2, 102, 1, 15, 46, 2, 102, 10, 1, 24, 4, 102
+	.byte	20, 1, 24, 4, 102, 30, 1, 24, 4, 102, 40, 1, 24, 4, 100, 1
+	.byte	3, 46, 2, 100, 1, 11, 46, 2, 100, 1, 20, 46, 2, 100, 24, 1
+	.byte	24, 4, 45, 22, 23, 4, 22, 24, 377
+
+LevelData2:
+	.byte	2, 30, 0
+	.byte	2, 20, 24, 0
+	.byte	144, 62, 11, 0
+	.byte	45, 3, 2, 4, 47, 22, 377
+
+LevelData3:
+	.byte	1, 44, 0
+	.byte	20, 0, 0, 0
+	.byte	24, 0, 0, 0
+	.byte	45, 1, 1, 4, 46, 24, 201, 10, 10, 4, 4, 0, 60, 12, 11, 201
+	.byte	20, 10, 4, 4, 0, 60, 22, 11, 201, 30, 10, 4, 4, 0, 60, 32
+	.byte	11, 201, 40, 10, 4, 4, 0, 60, 42, 11, 377
+
+LevelData4:
+	.byte	1, 4, 0
+	.byte	0, 0, 0, 0
+	.byte	0, 0, 0, 0
+	.byte	45, 1, 1, 4, 47, 24, 200, 10, 10, 3, 3, 0, 200, 20, 10, 3
+	.byte	3, 0, 200, 30, 10, 3, 3, 0, 200, 40, 10, 3, 3, 0, 24, 11
+	.byte	12, 10, 12, 10, 24, 21, 12, 10, 22, 10, 24, 31, 12, 10, 32, 10
+	.byte	24, 41, 12, 10, 42, 10, 200, 10, 16, 3, 3, 0, 200, 20, 16, 3
+	.byte	3, 0, 200, 30, 16, 3, 3, 0, 200, 40, 16, 3, 3, 0, 24, 11
+	.byte	20, 10, 12, 16, 24, 21, 20, 10, 22, 16, 24, 31, 20, 10, 32, 16
+	.byte	24, 41, 20, 10, 42, 16, 377
+
+LevelData5:
+	.byte	0, 4, 0
+	.byte	20, 0, 0, 0
+	.byte	62, 0, 0, 0
+	.byte	202, 1, 1, 12, 4, 0, 202, 1, 4, 12, 4, 0, 202, 1, 7, 12
+	.byte	4, 0, 202, 1, 12, 12, 4, 0, 101, 12, 1, 15, 4, 24, 3, 3
+	.byte	10, 4, 3, 24, 3, 6, 10, 4, 6, 24, 3, 11, 10, 4, 11, 24
+	.byte	3, 14, 10, 4, 14, 202, 35, 1, 12, 4, 0, 202, 35, 4, 12, 4
+	.byte	0, 202, 35, 7, 12, 4, 0, 202, 35, 12, 12, 4, 0, 101, 35, 1
+	.byte	15, 4, 24, 44, 3, 10, 43, 3, 24, 44, 6, 10, 43, 6, 24, 44
+	.byte	11, 10, 43, 11, 24, 44, 14, 10, 43, 14, 45, 3, 22, 4, 46, 22
+	.byte	377
+
+LevelData6:
+	.byte	0, 17, 2
+	.byte	0, 20, 10, 0
+	.byte	144, 50, 2, 0
+	.byte	102, 1, 5, 14, 2, 102, 34, 3, 13, 2, 170, 23, 23, 2, 2, 24
+	.byte	4, 4, 24, 4, 14, 24, 4, 24, 24, 42, 2, 24, 42, 12, 24, 42
+	.byte	24, 45, 24, 1, 4, 47, 5, 377
+
+LevelData7:
+	.byte	0, 12, 1
+	.byte	0, 20, 10, 0
+	.byte	132, 62, 2, 0
+	.byte	24, 4, 4, 24, 42, 2, 24, 42, 12, 4, 0, 3, 45, 24, 1, 102
+	.byte	1, 5, 14, 2, 102, 1, 15, 14, 2, 102, 34, 3, 13, 2, 102, 34
+	.byte	13, 13, 2, 103, 16, 17, 10, 2, 24, 14, 16, 0, 16, 20, 24, 23
+	.byte	20, 101, 16, 15, 10, 2, 377
+
+LevelData8:
+	.byte	1, 113, 144
+	.byte	20, 24, 0, 0
+	.byte	360, 170, 0, 0
+	.byte	202, 5, 10, 15, 15, 0, 1, 14, 10, 202, 31, 10, 15, 15, 0, 1
+	.byte	37, 10, 102, 21, 20, 11, 2, 100, 21, 21, 11, 2, 45, 7, 12, 4
+	.byte	10, 12, 377
+
+LevelData9:
+	.byte	0, 14, 0
+	.byte	0, 0, 0, 0
+	.byte	0, 0, 0, 0
+	.byte	45, 15, 1, 4, 47, 24, 124, 5, 2, 21, 3, 124, 25, 2, 21, 5
+	.byte	200, 5, 11, 21, 3, 10, 302, 1, 2, 25, 21, 0, 15, 2, 302, 7
+	.byte	4, 15, 15, 0, 15, 4, 302, 11, 6, 11, 11, 0, 15, 6, 302, 13
+	.byte	10, 5, 5, 0, 15, 10, 202, 3, 4, 3, 17, 10, 0, 4, 4, 124
+	.byte	4, 16, 4, 4, 377
+
+LevelData10:
+	.byte	2, 6, 0
+	.byte	0, 20, 10, 0
+	.byte	144, 120, 2, 0
+	.byte	102, 12, 1, 11, 4, 102, 24, 1, 11, 4, 102, 36, 1, 11, 4, 102
+	.byte	11, 24, 11, 0, 102, 14, 15, 21, 2, 102, 5, 11, 11, 2, 102, 17
+	.byte	11, 11, 2, 102, 31, 11, 11, 2, 102, 34, 21, 13, 1, 24, 4, 1
+	.byte	24, 16, 1, 24, 30, 1, 24, 42, 1, 24, 4, 24, 24, 43, 23, 45
+	.byte	24, 22, 4, 46, 17, 377
+
+LevelData11:
+	.byte	0, 23, 0
+	.byte	0, 20, 24, 0
+	.byte	74, 62, 11, 0
+	.byte	102, 12, 3, 22, 4, 102, 16, 3, 22, 4, 102, 22, 3, 22, 4, 102
+	.byte	26, 3, 22, 4, 102, 2, 4, 13, 2, 102, 2, 10, 13, 2, 102, 2
+	.byte	14, 17, 2, 102, 2, 20, 13, 2, 201, 36, 2, 4, 4, 0, 10, 40
+	.byte	3, 201, 36, 7, 4, 4, 0, 10, 40, 10, 201, 36, 14, 4, 4, 0
+	.byte	10, 40, 15, 45, 3, 22, 4, 47, 24, 377
+
+LevelData12:
+	.byte	0, 62, 0
+	.byte	20, 0, 0, 0
+	.byte	50, 0, 0, 0
+	.byte	45, 22, 1, 4, 12, 1, 70, 24, 1, 102, 5, 20, 36, 2, 160, 5
+	.byte	21, 36, 2, 120, 5, 22, 36, 2, 301, 5, 23, 36, 2, 377
+
+LevelData13:
+	.byte	1, 36, 0
+	.byte	20, 0, 0, 0
+	.byte	0, 0, 0, 0
+	.byte	201, 12, 10, 15, 15, 0, 160, 13, 11, 14, 3, 301, 14, 10, 3, 15
+	.byte	301, 20, 10, 3, 15, 301, 24, 10, 3, 15, 120, 26, 6, 14, 2, 110
+	.byte	26, 5, 14, 2, 301, 27, 4, 3, 4, 301, 33, 4, 3, 4, 301, 37
+	.byte	4, 3, 4, 45, 3, 1, 4, 47, 22, 377
+
+LevelData14:
+	.byte	2, 17, 1
+	.byte	0, 20, 10, 0
+	.byte	144, 120, 2, 0
+	.byte	102, 2, 2, 12, 3, 102, 17, 13, 12, 1, 101, 14, 14, 3, 2, 103
+	.byte	14, 15, 3, 2, 4, 24, 24, 45, 24, 1, 377
+
+LevelData15:
+	.byte	0, 14, 1
+	.byte	20, 0, 0, 0
+	.byte	62, 0, 0, 0
+	.byte	45, 1, 1, 4, 47, 2, 201, 10, 21, 4, 4, 0, 10, 12, 22, 302
+	.byte	7, 10, 6, 10, 103, 7, 10, 6, 2, 201, 20, 21, 4, 4, 0, 10
+	.byte	22, 22, 302, 17, 10, 6, 10, 103, 17, 10, 6, 2, 201, 30, 21, 4
+	.byte	4, 0, 10, 32, 22, 201, 40, 21, 4, 4, 0, 10, 42, 22, 377
+
+LevelData16:
+	.byte	0, 6, 12
+	.byte	0, 24, 0, 0
+	.byte	377, 11, 0, 0
+	.byte	207, 0, 0, 50, 26, 7, 207, 0, 0, 24, 14, 0, 62, 12, 12, 20
+	.byte	12, 2, 1, 12, 3, 45, 3, 3, 4, 22, 12, 377
+
+LevelData17:
+	.byte	0, 20, 12
+	.byte	0, 0, 0, 0
+	.byte	0, 0, 0, 0
+	.byte	207, 0, 0, 50, 26, 7, 207, 0, 0, 24, 14, 1, 120, 1, 1, 11
+	.byte	3, 110, 2, 1, 10, 3, 124, 1, 3, 10, 3, 120, 1, 4, 7, 3
+	.byte	120, 22, 1, 11, 5, 124, 22, 3, 10, 5, 120, 22, 4, 7, 5, 45
+	.byte	1, 2, 4, 22, 2, 377
+
+LevelData18:
+	.byte	0, 16, 12
+	.byte	0, 0, 0, 0
+	.byte	0, 0, 0, 0
+	.byte	207, 0, 0, 50, 26, 7, 207, 0, 0, 24, 14, 0, 124, 1, 12, 22
+	.byte	2, 210, 17, 7, 4, 4, 10, 45, 10, 1, 4, 22, 5, 377
+
+LevelData19:
+	.byte	0, 6, 0
+	.byte	0, 0, 0, 0
+	.byte	0, 0, 0, 0
+	.byte	207, 0, 0, 50, 26, 7, 207, 0, 0, 24, 14, 1, 320, 13, 1, 3
+	.byte	2, 200, 13, 5, 3, 6, 0, 103, 13, 4, 3, 2, 103, 13, 10, 3
+	.byte	2, 120, 10, 5, 3, 3, 45, 3, 1, 4, 11, 10, 377
+
+	.even
+
+TilesCpuData:
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+
+	.word	0, 0, 0, 0, 0, 42, 0, 0
+	.word	0, 0, 0, 0, 42, 0, 0, 0
+
+	.word	377, 377, 377, 231, 231, 273, 377, 377
+	.word	377, 377, 231, 231, 273, 377, 377, 377
+
+	.word	177777, 177777, 177777, 114631, 114631, 114673, 177777, 177777
+	.word	177777, 177777, 114631, 114631, 114673, 177777, 177777, 177777
+
+	.word	122000, 111400, 25104, 135400, 156400, 52042, 143031, 36500
+	.word	167020, 34502, 122422, 126102, 52400, 131400, 23410, 51000
+
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+
+	.word	244, 223, 156, 273, 335, 166, 337, 175
+	.word	376, 173, 267, 356, 125, 263, 57, 122
+
+	.word	356, 314, 0, 0, 273, 63, 0, 0
+	.word	356, 314, 0, 0, 273, 63, 0, 0
+
+	.word	356, 21314, 167000, 0, 273, 104063, 135400, 0
+	.word	356, 21314, 167000, 0, 273, 104063, 135400, 0
+
+	.word	356, 314, 0, 0, 273, 63, 0, 0
+	.word	356, 314, 0, 0, 273, 63, 0, 0
+
+	.word	16034, 27072, 76567, 165766, 173750, 156642, 171714, 157640
+	.word	76600, 55640, 176400, 175400, 73400, 77000, 22020, 14000
+
+	.word	16034, 25072, 72567, 161366, 160350, 100242, 140314, 100240
+	.word	200, 240, 0, 0, 0, 0, 20, 0
+
+	.word	16034, 27072, 76567, 165766, 173750, 156642, 171714, 157640
+	.word	76600, 55640, 176400, 175400, 73400, 77000, 22020, 14000
+
+	.word	0, 0, 0, 0, 20040, 2004, 11022, 44110
+	.word	10020, 2004, 21042, 14030, 0, 0, 0, 0
+
+	.word	0, 0, 0, 20040, 4010, 41102, 20040, 5012
+	.word	20040, 11022, 24050, 42104, 12024, 0, 0, 0
+
+	.word	0, 0, 51122, 4010, 41102, 2004, 41102, 4411
+	.word	0, 42505, 1002, 4010, 40501, 14030, 1002, 0
+
+	.word	14030, 30, 22044, 44, 41102, 102, 100653, 40325
+	.word	177777, 40353, 41102, 102, 22044, 44, 14030, 30
+
+	.word	14030, 30, 22044, 54, 41126, 36176, 100653, 201
+	.word	100601, 201, 41102, 102, 22044, 44, 14030, 30
+
+	.word	14030, 30, 36074, 54, 41102, 102, 100601, 201
+	.word	100601, 201, 41102, 102, 22054, 64, 14030, 30
+
+	.word	14030, 30, 22044, 44, 41102, 102, 100601, 201
+	.word	100601, 253, 41126, 36176, 22054, 44, 14030, 30
+
+	.word	177777, 314, 0, 0, 273, 63, 0, 0
+	.word	356, 314, 0, 0, 273, 63, 0, 177777
+
+	.word	177777, 231, 0, 0, 167, 146, 0, 0
+	.word	335, 231, 0, 0, 167, 146, 0, 177777
+
+	.word	177777, 63, 0, 0, 356, 314, 0, 0
+	.word	273, 63, 0, 0, 356, 314, 0, 177777
+
+	.word	177777, 146, 0, 0, 335, 231, 0, 0
+	.word	167, 146, 0, 0, 335, 231, 0, 177777
+
+	.word	177400, 177400, 100400, 100400, 136400, 136400, 136430, 136430
+	.word	136430, 136430, 136400, 136400, 100400, 100400, 177400, 177400
+
+	.word	0, 0, 77000, 77000, 77074, 77074, 77044, 77044
+	.word	77044, 77044, 77074, 77074, 77000, 77000, 0, 0
+
+	.word	177400, 177400, 177576, 177576, 177502, 177502, 163502, 163502
+	.word	163502, 163502, 177502, 177502, 177576, 177576, 177400, 177400
+
+	.word	177777, 177777, 177601, 177601, 141601, 141601, 155601, 155601
+	.word	155601, 155601, 141601, 141601, 177601, 177601, 177777, 177777
+
+	.word	100401, 100400, 141603, 141601, 163404, 163400, 14010, 14000
+	.word	177410, 177400, 163707, 163703, 141402, 141400, 100400, 100400
+
+	.word	41002, 41002, 41000, 41000, 63004, 63000, 14010, 14000
+	.word	77010, 77000, 63106, 63102, 41002, 41000, 41000, 41000
+
+	.word	22004, 22000, 22004, 22000, 22000, 22000, 14010, 14000
+	.word	14010, 14000, 22000, 22000, 22000, 22000, 22000, 22000
+
+	.word	41002, 41002, 41000, 41000, 63004, 63000, 14010, 14000
+	.word	77010, 77000, 63106, 63102, 41002, 41000, 41000, 41000
+
+	.word	0, 22044, 36074, 55132, 55132, 36074, 30, 36074
+	.word	55132, 22074, 14030, 30, 36030, 22000, 22000, 63146
+
+	.word	0, 22044, 36074, 55132, 55132, 36074, 30, 36074
+	.word	55132, 22074, 14030, 30, 36030, 22000, 22000, 63146
+
+	.word	0, 22044, 36074, 55132, 55132, 36074, 30, 36074
+	.word	55132, 22074, 14030, 30, 36030, 22000, 23006, 60140
+
+	.word	0, 22044, 36074, 55132, 55132, 36074, 30, 36074
+	.word	55132, 22074, 14030, 30, 36030, 22000, 23006, 60140
+
+	.word	0, 14030, 36074, 56134, 56134, 36074, 30, 14030
+	.word	14030, 20070, 14030, 30, 34030, 27000, 23002, 61142
+
+	.word	0, 0, 14030, 36074, 56134, 56134, 36074, 14030
+	.word	14030, 20070, 14030, 30, 14030, 14000, 14000, 30060
+
+	.word	0, 0, 14030, 36074, 56134, 56134, 36074, 14030
+	.word	14030, 20070, 14030, 30, 14030, 34000, 34000, 14030
+
+	.word	0, 14030, 36074, 56134, 56134, 36074, 30, 14030
+	.word	14030, 20070, 14030, 30, 14030, 14000, 14000, 30060
+
+	.word	0, 14030, 36074, 35072, 35072, 36074, 30, 14030
+	.word	14030, 2034, 14030, 30, 14030, 14000, 34040, 26054
+
+	.word	0, 0, 14030, 36074, 35072, 35072, 36074, 14030
+	.word	14030, 2034, 14030, 30, 14030, 16000, 16000, 14030
+
+	.word	0, 0, 14030, 36074, 35072, 35072, 36074, 14030
+	.word	14030, 2034, 14030, 30, 14030, 14000, 34040, 26054
+
+	.word	0, 14030, 36074, 35072, 35072, 36074, 30, 14030
+	.word	14030, 2034, 14030, 30, 16030, 72000, 62100, 43106
+
+	.word	0, 0, 0, 0, 0, 42, 0, 0
+	.word	0, 0, 0, 0, 42, 0, 0, 0
+
+	.word	0, 0, 0, 0, 0, 42, 0, 0
+	.word	0, 0, 0, 0, 42, 0, 0, 0
+
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+
+	.word	357, 377, 376, 174, 174, 174, 376, 377
+	.word	377, 176, 74, 74, 74, 176, 377, 377
+
+	.word	307, 357, 177, 76, 34, 76, 177, 377
+	.word	377, 377, 176, 74, 176, 377, 357, 307
+
+	.word	203, 307, 357, 177, 76, 177, 377, 377
+	.word	377, 377, 377, 377, 377, 357, 307, 203
+
+	.word	307, 357, 377, 376, 174, 376, 377, 377
+	.word	377, 377, 174, 74, 174, 377, 357, 307
+
+PPUStart:
+	.byte	207, 0, 0, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 0, 0, 16, 2, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0, 40, 11, 200, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	27, 215, 200, 0, 137, 0, 134, 10, 230, 334, 272, 376, 0, 0, 22, 2
+	.byte	20, 0, 47, 0, 0, 0, 30, 2, 0, 0, 34, 2, 0, 0, 40, 2
+	.byte	0, 0, 44, 2, 0, 0, 50, 2, 0, 0, 54, 2, 0, 0, 60, 2
+	.byte	0, 0, 64, 2, 0, 0, 70, 2, 0, 0, 74, 2, 0, 0, 100, 2
+	.byte	0, 0, 104, 2, 0, 0, 110, 2, 0, 0, 114, 2, 0, 0, 120, 2
+	.byte	0, 0, 124, 2, 0, 0, 130, 2, 0, 200, 134, 2, 50, 200, 140, 2
+	.byte	120, 200, 144, 2, 170, 200, 150, 2, 240, 200, 154, 2, 310, 200, 160, 2
+	.byte	360, 200, 164, 2, 30, 201, 170, 2, 100, 201, 174, 2, 150, 201, 200, 2
+	.byte	220, 201, 204, 2, 270, 201, 210, 2, 340, 201, 214, 2, 10, 202, 220, 2
+	.byte	60, 202, 224, 2, 130, 202, 230, 2, 200, 202, 234, 2, 250, 202, 240, 2
+	.byte	320, 202, 244, 2, 370, 202, 250, 2, 40, 203, 254, 2, 110, 203, 260, 2
+	.byte	160, 203, 264, 2, 230, 203, 270, 2, 300, 203, 274, 2, 350, 203, 300, 2
+	.byte	20, 204, 304, 2, 70, 204, 310, 2, 140, 204, 314, 2, 210, 204, 320, 2
+	.byte	260, 204, 324, 2, 330, 204, 330, 2, 0, 205, 334, 2, 50, 205, 340, 2
+	.byte	120, 205, 344, 2, 170, 205, 350, 2, 240, 205, 354, 2, 310, 205, 360, 2
+	.byte	360, 205, 364, 2, 30, 206, 370, 2, 100, 206, 374, 2, 150, 206, 0, 3
+	.byte	220, 206, 4, 3, 270, 206, 10, 3, 340, 206, 14, 3, 10, 207, 20, 3
+	.byte	60, 207, 24, 3, 130, 207, 30, 3, 200, 207, 34, 3, 250, 207, 40, 3
+	.byte	320, 207, 44, 3, 370, 207, 50, 3, 40, 210, 54, 3, 110, 210, 60, 3
+	.byte	160, 210, 64, 3, 230, 210, 70, 3, 300, 210, 74, 3, 350, 210, 100, 3
+	.byte	20, 211, 104, 3, 70, 211, 110, 3, 140, 211, 114, 3, 210, 211, 120, 3
+	.byte	260, 211, 124, 3, 330, 211, 130, 3, 0, 212, 134, 3, 50, 212, 140, 3
+	.byte	120, 212, 144, 3, 170, 212, 150, 3, 240, 212, 154, 3, 310, 212, 160, 3
+	.byte	360, 212, 164, 3, 30, 213, 170, 3, 100, 213, 174, 3, 150, 213, 200, 3
+	.byte	220, 213, 204, 3, 270, 213, 210, 3, 340, 213, 214, 3, 10, 214, 220, 3
+	.byte	60, 214, 224, 3, 130, 214, 230, 3, 200, 214, 234, 3, 250, 214, 240, 3
+	.byte	320, 214, 244, 3, 370, 214, 250, 3, 40, 215, 254, 3, 110, 215, 260, 3
+	.byte	160, 215, 264, 3, 230, 215, 270, 3, 300, 215, 274, 3, 350, 215, 300, 3
+	.byte	20, 216, 304, 3, 70, 216, 310, 3, 140, 216, 314, 3, 210, 216, 320, 3
+	.byte	260, 216, 324, 3, 330, 216, 330, 3, 0, 217, 334, 3, 50, 217, 340, 3
+	.byte	120, 217, 344, 3, 170, 217, 350, 3, 240, 217, 354, 3, 310, 217, 360, 3
+	.byte	360, 217, 364, 3, 30, 220, 370, 3, 100, 220, 374, 3, 150, 220, 0, 4
+	.byte	220, 220, 4, 4, 270, 220, 10, 4, 340, 220, 14, 4, 10, 221, 20, 4
+	.byte	60, 221, 24, 4, 130, 221, 30, 4, 200, 221, 34, 4, 250, 221, 40, 4
+	.byte	320, 221, 44, 4, 370, 221, 50, 4, 40, 222, 54, 4, 110, 222, 60, 4
+	.byte	160, 222, 64, 4, 230, 222, 70, 4, 300, 222, 74, 4, 350, 222, 100, 4
+	.byte	20, 223, 104, 4, 70, 223, 110, 4, 140, 223, 114, 4, 210, 223, 120, 4
+	.byte	260, 223, 124, 4, 330, 223, 130, 4, 0, 224, 134, 4, 50, 224, 140, 4
+	.byte	120, 224, 144, 4, 170, 224, 150, 4, 240, 224, 154, 4, 310, 224, 160, 4
+	.byte	360, 224, 164, 4, 30, 225, 170, 4, 100, 225, 174, 4, 150, 225, 200, 4
+	.byte	220, 225, 204, 4, 270, 225, 210, 4, 340, 225, 214, 4, 10, 226, 220, 4
+	.byte	60, 226, 224, 4, 130, 226, 230, 4, 200, 226, 234, 4, 250, 226, 240, 4
+	.byte	320, 226, 244, 4, 370, 226, 250, 4, 40, 227, 254, 4, 110, 227, 260, 4
+	.byte	160, 227, 264, 4, 230, 227, 270, 4, 300, 227, 274, 4, 350, 227, 300, 4
+	.byte	20, 230, 304, 4, 70, 230, 310, 4, 140, 230, 314, 4, 210, 230, 320, 4
+	.byte	260, 230, 324, 4, 330, 230, 330, 4, 0, 231, 334, 4, 50, 231, 340, 4
+	.byte	120, 231, 344, 4, 170, 231, 350, 4, 240, 231, 354, 4, 310, 231, 360, 4
+	.byte	360, 231, 364, 4, 30, 232, 370, 4, 100, 232, 374, 4, 150, 232, 0, 5
+	.byte	220, 232, 4, 5, 270, 232, 10, 5, 340, 232, 14, 5, 10, 233, 20, 5
+	.byte	60, 233, 24, 5, 130, 233, 30, 5, 200, 233, 34, 5, 250, 233, 40, 5
+	.byte	320, 233, 44, 5, 370, 233, 50, 5, 40, 234, 54, 5, 110, 234, 60, 5
+	.byte	160, 234, 64, 5, 230, 234, 70, 5, 300, 234, 74, 5, 350, 234, 100, 5
+	.byte	20, 235, 104, 5, 70, 235, 110, 5, 140, 235, 114, 5, 210, 235, 120, 5
+	.byte	260, 235, 124, 5, 330, 235, 130, 5, 0, 236, 134, 5, 50, 236, 140, 5
+	.byte	120, 236, 144, 5, 170, 236, 150, 5, 240, 236, 154, 5, 310, 236, 160, 5
+	.byte	360, 236, 164, 5, 30, 237, 170, 5, 100, 237, 174, 5, 150, 237, 200, 5
+	.byte	220, 237, 204, 5, 270, 237, 210, 5, 340, 237, 214, 5, 10, 240, 220, 5
+	.byte	60, 240, 224, 5, 130, 240, 230, 5, 200, 240, 234, 5, 250, 240, 240, 5
+	.byte	320, 240, 244, 5, 370, 240, 250, 5, 40, 241, 254, 5, 110, 241, 260, 5
+	.byte	160, 241, 264, 5, 230, 241, 270, 5, 300, 241, 274, 5, 350, 241, 300, 5
+	.byte	20, 242, 304, 5, 70, 242, 310, 5, 140, 242, 314, 5, 210, 242, 320, 5
+	.byte	260, 242, 324, 5, 330, 242, 330, 5, 0, 243, 334, 5, 50, 243, 340, 5
+	.byte	120, 243, 344, 5, 170, 243, 350, 5, 240, 243, 354, 5, 310, 243, 360, 5
+	.byte	360, 243, 364, 5, 30, 244, 370, 5, 100, 244, 374, 5, 150, 244, 0, 6
+	.byte	220, 244, 4, 6, 270, 244, 10, 6, 340, 244, 14, 6, 10, 245, 20, 6
+	.byte	60, 245, 24, 6, 130, 245, 30, 6, 200, 245, 34, 6, 250, 245, 40, 6
+	.byte	320, 245, 44, 6, 370, 245, 50, 6, 40, 246, 54, 6, 110, 246, 60, 6
+	.byte	160, 246, 64, 6, 230, 246, 70, 6, 300, 246, 74, 6, 350, 246, 100, 6
+	.byte	20, 247, 104, 6, 70, 247, 110, 6, 140, 247, 114, 6, 210, 247, 120, 6
+	.byte	260, 247, 124, 6, 330, 247, 130, 6, 0, 250, 134, 6, 50, 250, 140, 6
+	.byte	120, 250, 144, 6, 170, 250, 150, 6, 240, 250, 154, 6, 310, 250, 160, 6
+	.byte	360, 250, 164, 6, 30, 251, 170, 6, 100, 251, 174, 6, 150, 251, 200, 6
+	.byte	220, 251, 204, 6, 270, 251, 210, 6, 340, 251, 214, 6, 10, 252, 220, 6
+	.byte	60, 252, 224, 6, 130, 252, 230, 6, 200, 252, 234, 6, 250, 252, 240, 6
+	.byte	320, 252, 244, 6, 370, 252, 250, 6, 40, 253, 254, 6, 110, 253, 260, 6
+	.byte	160, 253, 264, 6, 230, 253, 270, 6, 300, 253, 274, 6, 350, 253, 300, 6
+	.byte	20, 254, 304, 6, 70, 254, 310, 6, 140, 254, 314, 6, 210, 254, 320, 6
+	.byte	260, 254, 324, 6, 330, 254, 330, 6, 0, 255, 334, 6, 50, 255, 340, 6
+	.byte	120, 255, 344, 6, 170, 255, 350, 6, 240, 255, 354, 6, 310, 255, 360, 6
+	.byte	360, 255, 364, 6, 30, 256, 370, 6, 100, 256, 374, 6, 150, 256, 0, 7
+	.byte	220, 256, 4, 7, 270, 256, 10, 7, 340, 256, 14, 7, 10, 257, 20, 7
+	.byte	60, 257, 24, 7, 130, 257, 30, 7, 200, 257, 34, 7, 250, 257, 40, 7
+	.byte	320, 257, 44, 7, 370, 257, 50, 7, 40, 260, 54, 7, 110, 260, 60, 7
+	.byte	160, 260, 64, 7, 230, 260, 70, 7, 300, 260, 74, 7, 350, 260, 100, 7
+	.byte	20, 261, 104, 7, 70, 261, 110, 7, 140, 261, 114, 7, 210, 261, 120, 7
+	.byte	260, 261, 124, 7, 330, 261, 130, 7, 0, 262, 134, 7, 50, 262, 140, 7
+	.byte	120, 262, 144, 7, 170, 262, 150, 7, 240, 262, 154, 7, 310, 262, 160, 7
+	.byte	360, 262, 164, 7, 30, 263, 170, 7, 100, 263, 174, 7, 150, 263, 200, 7
+	.byte	220, 263, 204, 7, 270, 263, 210, 7, 340, 263, 214, 7, 10, 264, 220, 7
+	.byte	60, 264, 224, 7, 130, 264, 230, 7, 200, 264, 234, 7, 250, 264, 240, 7
+	.byte	320, 264, 244, 7, 370, 264, 250, 7, 40, 265, 254, 7, 110, 265, 260, 7
+	.byte	160, 265, 264, 7, 230, 265, 270, 7, 300, 265, 274, 7, 350, 265, 300, 7
+	.byte	20, 266, 304, 7, 70, 266, 310, 7, 140, 266, 314, 7, 210, 266, 320, 7
+	.byte	260, 266, 324, 7, 330, 266, 330, 7, 0, 267, 334, 7, 50, 267, 340, 7
+	.byte	120, 267, 344, 7, 170, 267, 350, 7, 240, 267, 354, 7, 310, 267, 360, 7
+	.byte	360, 267, 364, 7, 30, 270, 370, 7, 100, 270, 374, 7, 150, 270, 0, 10
+	.byte	220, 270, 4, 10, 270, 270, 10, 10, 340, 270, 14, 10, 10, 271, 20, 10
+	.byte	60, 271, 24, 10, 130, 271, 30, 10, 200, 271, 34, 10, 250, 271, 40, 10
+	.byte	320, 271, 44, 10, 370, 271, 50, 10, 40, 272, 54, 10, 110, 272, 60, 10
+	.byte	160, 272, 64, 10, 230, 272, 70, 10, 300, 272, 74, 10, 350, 272, 100, 10
+	.byte	20, 273, 104, 10, 70, 273, 110, 10, 140, 273, 114, 10, 210, 273, 120, 10
+	.byte	260, 273, 124, 10, 330, 273, 130, 10, 0, 274, 130, 10, 306, 25, 0, 2
+	.byte	337, 25, 361, 0, 54, 376, 337, 11, 66, 11, 300, 25, 0, 200, 303, 25
+	.byte	0, 77, 20, 12, 302, 176, 337, 25, 377, 157, 10, 376, 337, 45, 377, 377
+	.byte	14, 376, 371, 2, 37, 12, 26, 376, 337, 105, 107, 0, 66, 376, 337, 105
+	.byte	0, 2, 54, 376, 337, 125, 0, 1, 54, 376, 337, 11, 46, 11, 337, 105
+	.byte	200, 0, 316, 377, 337, 25, 20, 14, 300, 0, 337, 125, 100, 0, 300, 377
+	.byte	337, 25, 377, 157, 10, 376, 37, 12, 14, 376, 27, 215, 0, 0, 337, 11
+	.byte	304, 10, 375, 1, 337, 25, 377, 157, 10, 376, 337, 13, 14, 376, 3, 2
+	.byte	237, 12, 142, 11, 207, 0, 304, 25, 10, 376, 305, 25, 14, 376, 314, 25
+	.byte	371, 157, 100, 23, 214, 12, 101, 23, 214, 12, 102, 23, 214, 12, 103, 23
+	.byte	214, 12, 214, 12, 214, 12, 105, 23, 305, 14, 375, 11, 12, 11, 337, 25
+	.byte	377, 157, 10, 376, 37, 12, 14, 376, 207, 0, 176, 15, 104, 11, 122, 11
+	.byte	144, 11, 166, 11, 6, 12, 212, 12, 336, 12, 50, 13, 176, 13, 232, 13
+	.byte	227, 12, 0, 0, 2, 0, 37, 12, 310, 377, 337, 13, 314, 377, 337, 13
+	.byte	310, 377, 371, 2, 207, 0, 300, 25, 152, 24, 302, 25, 313, 65, 20, 12
+	.byte	202, 176, 207, 0, 305, 25, 0, 200, 303, 25, 0, 36, 25, 12, 302, 176
+	.byte	207, 0, 305, 25, 10, 2, 25, 20, 125, 20, 125, 45, 225, 20, 315, 20
+	.byte	207, 0, 0, 0, 337, 25, 366, 157, 10, 376, 337, 27, 142, 11, 14, 376
+	.byte	37, 12, 142, 11, 207, 0, 337, 25, 365, 157, 10, 376, 337, 27, 42, 11
+	.byte	14, 376, 207, 0, 304, 25, 10, 376, 305, 25, 12, 376, 207, 0, 304, 25
+	.byte	10, 376, 305, 25, 24, 376, 114, 20, 337, 25, 7, 0, 16, 376, 37, 12
+	.byte	20, 376, 37, 12, 22, 376, 302, 25, 50, 0, 1, 224, 53, 3, 127, 40
+	.byte	7, 0, 3, 202, 137, 20, 16, 376, 370, 1, 301, 345, 60, 0, 2, 4
+	.byte	301, 25, 20, 0, 301, 14, 301, 14, 301, 14, 301, 145, 22, 23, 103, 224
+	.byte	315, 20, 214, 140, 103, 224, 315, 20, 214, 140, 103, 224, 315, 20, 214, 140
+	.byte	103, 224, 315, 20, 214, 140, 103, 224, 315, 20, 214, 140, 103, 224, 315, 20
+	.byte	214, 140, 103, 224, 315, 20, 214, 140, 103, 224, 315, 20, 214, 140, 314, 345
+	.byte	77, 1, 323, 1, 207, 0, 301, 25, 330, 2, 303, 25, 100, 0, 21, 20
+	.byte	201, 12, 201, 12, 300, 145, 50, 0, 21, 20, 201, 12, 201, 12, 300, 145
+	.byte	50, 0, 21, 20, 201, 12, 201, 12, 300, 145, 50, 0, 21, 20, 201, 12
+	.byte	201, 12, 300, 145, 50, 0, 325, 176, 321, 25, 0, 274, 201, 12, 201, 12
+	.byte	321, 25, 0, 274, 201, 12, 201, 12, 321, 25, 0, 274, 201, 12, 201, 12
+	.byte	321, 25, 0, 274, 201, 12, 201, 12, 321, 25, 0, 274, 201, 12, 201, 12
+	.byte	321, 25, 0, 274, 201, 12, 201, 12, 321, 25, 0, 274, 201, 12, 201, 12
+	.byte	321, 25, 0, 274, 201, 12, 201, 12, 321, 25, 0, 274, 201, 12, 201, 12
+	.byte	321, 25, 0, 274, 201, 12, 201, 12, 207, 0, 337, 11, 204, 11, 14, 20
+	.byte	127, 164, 4, 0, 301, 145, 322, 17, 302, 25, 50, 0, 115, 224, 214, 140
+	.byte	115, 224, 214, 140, 115, 224, 214, 140, 115, 224, 214, 140, 115, 224, 214, 140
+	.byte	115, 224, 214, 140, 115, 224, 214, 140, 115, 224, 214, 140, 115, 224, 214, 140
+	.byte	115, 224, 214, 140, 115, 224, 214, 140, 115, 224, 214, 140, 115, 224, 214, 140
+	.byte	115, 224, 214, 140, 115, 224, 214, 140, 115, 224, 214, 140, 207, 0, 300, 27
+	.byte	10, 2, 337, 125, 7, 0, 10, 2, 337, 25, 370, 157, 10, 376, 37, 12
+	.byte	14, 376, 337, 25, 370, 157, 10, 376, 327, 47, 14, 376, 3, 0, 371, 207
+	.byte	37, 20, 10, 2, 207, 0, 3, 103, 101, 126, 105, 72, 7, 130, 40, 40
+	.byte	40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 0, 3, 60, 60, 60, 0
+	.byte	7, 60, 60, 60, 0, 0, 1, 0, 146, 20, 300, 145, 101, 0, 37, 220
+	.byte	15, 13, 301, 25, 61, 202, 300, 25, 6, 13, 337, 11, 216, 11, 200, 25
+	.byte	305, 25, 34, 13, 337, 11, 132, 13, 237, 20, 46, 13, 301, 25, 100, 202
+	.byte	300, 25, 33, 13, 337, 11, 216, 11, 207, 0, 325, 225, 40, 0, 325, 225
+	.byte	40, 0, 325, 225, 40, 0, 2, 12, 1, 20, 0, 12, 202, 12, 27, 162
+	.byte	12, 0, 301, 145, 60, 0, 145, 220, 300, 13, 366, 2, 207, 0, 305, 25
+	.byte	41, 13, 337, 11, 132, 13, 301, 25, 77, 202, 301, 347, 46, 13, 300, 25
+	.byte	40, 13, 337, 11, 216, 11, 207, 0, 0, 0, 27, 215, 200, 0, 337, 11
+	.byte	46, 11, 300, 14, 0, 34, 204, 15, 20, 3, 1, 24, 16, 3, 37, 20
+	.byte	230, 13, 137, 20, 312, 377, 337, 13, 314, 377, 337, 13, 314, 377, 337, 25
+	.byte	320, 13, 304, 0, 337, 25, 101, 0, 310, 377, 27, 215, 0, 0, 207, 0
+	.byte	337, 105, 200, 0, 316, 377, 337, 25, 336, 13, 304, 0, 6, 1, 337, 125
+	.byte	200, 0, 316, 377, 337, 25, 320, 13, 304, 0, 337, 37, 252, 377, 312, 377
+	.byte	10, 3, 337, 145, 2, 0, 230, 13, 337, 13, 314, 377, 337, 13, 314, 377
+	.byte	2, 0, 37, 12, 310, 377, 337, 13, 314, 377, 337, 13, 314, 377, 2, 0
+	.byte	46, 20, 300, 27, 302, 377, 146, 20, 246, 20, 346, 20, 46, 21, 146, 21
+	.byte	304, 25, 10, 376, 305, 25, 14, 376, 46, 23, 314, 25, 364, 157, 15, 20
+	.byte	300, 65, 200, 0, 44, 2, 301, 25, 162, 15, 302, 25, 163, 15, 221, 224
+	.byte	221, 224, 221, 224, 221, 224, 221, 224, 21, 220, 303, 25, 6, 0, 241, 244
+	.byte	4, 2, 303, 176, 314, 25, 362, 157, 215, 12, 314, 25, 363, 157, 215, 12
+	.byte	301, 25, 362, 14, 311, 13, 27, 3, 21, 40, 3, 3, 301, 145, 4, 0
+	.byte	371, 1, 114, 24, 215, 12, 114, 24, 16, 3, 15, 12, 14, 1, 300, 105
+	.byte	360, 377, 300, 14, 1, 34, 250, 14, 0, 34, 246, 14, 1, 40, 3, 206
+	.byte	14, 24, 15, 12, 373, 1, 214, 25, 205, 25, 204, 25, 203, 25, 202, 25
+	.byte	201, 25, 200, 25, 2, 0, 310, 14, 310, 14, 310, 14, 310, 14, 310, 14
+	.byte	312, 14, 314, 14, 314, 14, 314, 14, 320, 14, 324, 14, 332, 14, 340, 14
+	.byte	350, 14, 354, 14, 360, 14, 362, 14, 351, 157, 353, 157, 343, 157, 350, 157
+	.byte	342, 157, 347, 157, 341, 157, 352, 157, 346, 157, 340, 157, 355, 157, 356, 157
+	.byte	337, 157, 360, 157, 361, 157, 345, 157, 336, 157, 344, 157, 335, 157, 357, 157
+	.byte	334, 157, 4, 0, 351, 157, 0, 0, 152, 0, 352, 157, 0, 0, 30, 0
+	.byte	343, 157, 0, 0, 31, 0, 342, 157, 0, 0, 32, 0, 341, 157, 0, 0
+	.byte	13, 0, 340, 157, 0, 0, 34, 0, 337, 157, 0, 0, 35, 0, 336, 157
+	.byte	0, 0, 16, 0, 335, 157, 0, 0, 17, 0, 334, 157, 0, 0, 113, 0
+	.byte	355, 157, 0, 0, 134, 0, 360, 157, 361, 157, 154, 0, 361, 157, 360, 157
+	.byte	116, 0, 357, 157, 356, 157, 133, 0, 356, 157, 357, 157, 10, 0, 350, 157
+	.byte	0, 0, 11, 0, 347, 157, 0, 0, 12, 0, 346, 157, 0, 0, 14, 0
+	.byte	345, 157, 0, 0, 15, 0, 344, 157, 0, 0, 105, 0, 353, 157, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 154, 134, 154, 154, 134, 134, 27, 215
+	.byte	200, 0, 377, 1, 0, 0, 222, 15, 262, 16, 270, 16, 362, 16, 164, 17
+	.byte	270, 17, 133, 3, 372, 1, 377, 1, 373, 1, 367, 5, 376, 1, 374, 1
+	.byte	375, 1, 375, 1, 366, 5, 376, 1, 371, 3, 376, 1, 361, 7, 375, 3
+	.byte	367, 3, 371, 5, 322, 7, 357, 1, 353, 1, 265, 7, 356, 1, 330, 3
+	.byte	357, 1, 330, 3, 334, 3, 310, 3, 340, 1, 333, 1, 165, 7, 227, 5
+	.byte	336, 1, 162, 7, 127, 7, 244, 17, 266, 10, 42, 7, 361, 1, 234, 11
+	.byte	314, 5, 352, 1, 360, 1, 303, 5, 336, 3, 227, 3, 236, 3, 312, 1
+	.byte	3, 11, 316, 1, 231, 3, 317, 1, 314, 1, 316, 1, 231, 3, 332, 4
+	.byte	235, 1, 73, 3, 236, 1, 235, 1, 330, 4, 166, 6, 73, 3, 61, 10
+	.byte	137, 3, 127, 3, 261, 1, 127, 3, 13, 5, 254, 1, 257, 1, 254, 1
+	.byte	256, 1, 255, 1, 133, 3, 255, 1, 147, 5, 150, 5, 147, 5, 234, 3
+	.byte	315, 1, 232, 3, 316, 1, 314, 1, 316, 1, 315, 1, 216, 1, 247, 4
+	.byte	252, 4, 215, 1, 34, 3, 33, 3, 250, 4, 217, 1, 247, 4, 220, 1
+	.byte	327, 14, 244, 1, 157, 6, 245, 1, 321, 4, 102, 3, 217, 6, 264, 1
+	.byte	125, 3, 15, 5, 127, 3, 261, 1, 252, 1, 261, 1, 252, 1, 260, 1
+	.byte	253, 1, 135, 3, 22, 7, 236, 3, 312, 1, 66, 7, 316, 1, 315, 1
+	.byte	232, 3, 232, 3, 316, 1, 343, 6, 36, 3, 213, 1, 253, 4, 215, 1
+	.byte	216, 1, 215, 1, 66, 6, 217, 1, 214, 1, 217, 1, 214, 1, 54, 3
+	.byte	235, 1, 236, 1, 72, 3, 261, 11, 237, 1, 71, 3, 75, 3, 234, 1
+	.byte	0, 0, 74, 0, 74, 0, 0, 0, 121, 0, 101, 0, 127, 0, 101, 0
+	.byte	222, 0, 73, 0, 102, 0, 75, 0, 146, 0, 75, 0, 130, 0, 102, 0
+	.byte	126, 0, 103, 0, 144, 0, 50, 0, 350, 1, 60, 11, 230, 5, 110, 4
+	.byte	40, 2, 10, 2, 20, 2, 360, 1, 210, 4, 10, 2, 30, 2, 153, 1
+	.byte	0, 0, 126, 0, 55, 0, 104, 0, 71, 0, 103, 0, 72, 0, 103, 0
+	.byte	71, 0, 104, 0, 71, 0, 103, 0, 72, 0, 103, 0, 72, 0, 103, 0
+	.byte	71, 0, 103, 0, 72, 0, 103, 0, 72, 0, 103, 0, 71, 0, 104, 0
+	.byte	71, 0, 103, 0, 72, 0, 103, 0, 72, 0, 103, 0, 71, 0, 104, 0
+	.byte	71, 0, 103, 0, 72, 0, 103, 0, 72, 0, 103, 0, 71, 0, 103, 0
+	.byte	72, 0, 103, 0, 72, 0, 103, 0, 71, 0, 104, 0, 71, 0, 103, 0
+	.byte	72, 0, 103, 0, 72, 0, 103, 0, 71, 0, 103, 0, 72, 0, 103, 0
+	.byte	72, 0, 103, 0, 71, 0, 104, 0, 71, 0, 103, 0, 72, 0, 103, 0
+	.byte	112, 0, 0, 0, 16, 0, 124, 0, 71, 0, 131, 0, 77, 0, 137, 0
+	.byte	112, 0, 141, 0, 125, 0, 151, 0, 132, 0, 160, 0, 145, 0, 164, 0
+	.byte	155, 0, 172, 0, 166, 0, 200, 0, 175, 0, 210, 0, 206, 0, 215, 0
+	.byte	216, 0, 224, 0, 225, 0, 234, 0, 235, 0, 242, 0, 244, 0, 251, 0
+	.byte	254, 0, 260, 0, 140, 0, 0, 0, 302, 0, 117, 0, 45, 0, 32, 0
+	.byte	113, 0, 31, 0, 322, 0, 51, 0, 45, 0, 114, 0, 32, 0, 64, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 377, 377, 377, 231, 273, 231, 377, 377, 377, 377, 231, 273, 231, 377
+	.byte	377, 377, 377, 377, 377, 231, 273, 231, 377, 377, 377, 377, 231, 273, 231, 377
+	.byte	377, 377, 377, 377, 377, 231, 273, 273, 377, 377, 377, 377, 231, 273, 273, 377
+	.byte	377, 377, 244, 223, 156, 273, 335, 166, 337, 175, 376, 173, 267, 356, 125, 263
+	.byte	57, 122, 244, 223, 156, 273, 335, 166, 337, 175, 376, 173, 267, 356, 125, 263
+	.byte	57, 122, 0, 0, 104, 0, 0, 42, 31, 100, 20, 102, 22, 102, 0, 0
+	.byte	10, 0, 0, 42, 356, 0, 0, 210, 273, 0, 0, 42, 356, 0, 0, 210
+	.byte	273, 0, 356, 356, 356, 0, 273, 273, 273, 0, 356, 356, 356, 0, 273, 273
+	.byte	273, 0, 356, 356, 356, 0, 273, 273, 273, 0, 356, 356, 356, 0, 273, 273
+	.byte	273, 0, 34, 52, 165, 342, 340, 200, 300, 200, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 34, 56, 175, 353, 367, 335, 363, 337, 175, 133, 375, 373, 167, 176
+	.byte	44, 30, 34, 52, 165, 342, 340, 200, 300, 200, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 40, 4, 22, 110, 20, 4, 42, 30, 0, 0
+	.byte	0, 0, 0, 0, 0, 40, 50, 106, 162, 112, 60, 26, 52, 134, 24, 0
+	.byte	0, 0, 0, 0, 122, 50, 152, 106, 162, 113, 60, 127, 52, 134, 125, 30
+	.byte	2, 0, 30, 30, 44, 44, 126, 152, 377, 377, 377, 377, 152, 126, 54, 44
+	.byte	30, 30, 30, 30, 54, 74, 176, 176, 377, 253, 325, 253, 102, 102, 44, 64
+	.byte	30, 30, 30, 30, 74, 74, 152, 126, 253, 201, 201, 201, 126, 152, 74, 74
+	.byte	30, 30, 30, 30, 64, 54, 102, 102, 201, 325, 253, 377, 176, 176, 74, 54
+	.byte	30, 30, 377, 42, 356, 0, 0, 210, 273, 0, 0, 42, 356, 0, 0, 210
+	.byte	273, 377, 377, 104, 335, 0, 0, 21, 167, 0, 0, 104, 335, 0, 0, 21
+	.byte	167, 377, 377, 210, 273, 0, 0, 42, 356, 0, 0, 210, 273, 0, 0, 42
+	.byte	356, 377, 377, 21, 167, 0, 0, 104, 335, 0, 0, 21, 167, 0, 0, 104
+	.byte	335, 377, 377, 377, 201, 201, 275, 275, 275, 275, 275, 275, 275, 275, 201, 201
+	.byte	377, 377, 0, 0, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176
+	.byte	0, 0, 377, 377, 377, 377, 377, 377, 347, 347, 347, 347, 377, 377, 377, 377
+	.byte	377, 377, 377, 377, 377, 377, 303, 303, 333, 333, 333, 333, 303, 303, 377, 377
+	.byte	377, 377, 201, 1, 303, 203, 347, 4, 30, 10, 30, 357, 347, 307, 303, 2
+	.byte	1, 0, 102, 102, 2, 2, 146, 4, 30, 10, 30, 156, 146, 106, 102, 2
+	.byte	102, 0, 44, 4, 44, 4, 44, 0, 30, 10, 30, 10, 44, 0, 44, 0
+	.byte	44, 0, 102, 102, 2, 2, 146, 4, 30, 10, 30, 156, 146, 106, 102, 2
+	.byte	102, 0, 0, 44, 74, 132, 132, 74, 30, 74, 132, 74, 30, 30, 74, 44
+	.byte	44, 146, 0, 44, 74, 132, 132, 74, 30, 74, 132, 74, 30, 30, 74, 44
+	.byte	44, 146, 0, 44, 74, 132, 132, 74, 30, 74, 132, 74, 30, 30, 74, 44
+	.byte	46, 140, 0, 44, 74, 132, 132, 74, 30, 74, 132, 74, 30, 30, 74, 44
+	.byte	46, 140, 0, 30, 74, 134, 134, 74, 30, 30, 30, 70, 30, 30, 70, 56
+	.byte	46, 142, 0, 0, 30, 74, 134, 134, 74, 30, 30, 70, 30, 30, 30, 30
+	.byte	30, 60, 0, 0, 30, 74, 134, 134, 74, 30, 30, 70, 30, 30, 30, 70
+	.byte	70, 30, 0, 30, 74, 134, 134, 74, 30, 30, 30, 70, 30, 30, 30, 30
+	.byte	30, 60, 0, 30, 74, 72, 72, 74, 30, 30, 30, 34, 30, 30, 30, 30
+	.byte	70, 54, 0, 0, 30, 74, 72, 72, 74, 30, 30, 34, 30, 30, 30, 34
+	.byte	34, 30, 0, 0, 30, 74, 72, 72, 74, 30, 30, 34, 30, 30, 30, 30
+	.byte	70, 54, 0, 30, 74, 72, 72, 74, 30, 30, 30, 34, 30, 30, 34, 164
+	.byte	144, 106, 377, 377, 377, 231, 273, 231, 377, 377, 377, 377, 231, 273, 231, 377
+	.byte	377, 377, 377, 377, 377, 231, 273, 231, 377, 377, 377, 377, 231, 273, 231, 377
+	.byte	377, 377, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 20, 0, 1, 202, 202, 202, 1, 0, 0, 201, 102, 102, 102, 201
+	.byte	0, 0, 50, 20, 200, 101, 142, 101, 200, 0, 0, 0, 201, 102, 201, 0
+	.byte	20, 50, 104, 50, 20, 200, 101, 200, 0, 0, 0, 0, 0, 0, 0, 20
+	.byte	50, 104, 50, 20, 0, 1, 202, 1, 0, 0, 0, 0, 203, 102, 203, 0
+	.byte	20, 50, 0, 76, 147, 147, 147, 147, 177, 76, 0, 30, 34, 34, 30, 30
+	.byte	176, 176, 0, 76, 163, 70, 34, 16, 177, 177, 0, 176, 60, 30, 60, 147
+	.byte	177, 76, 0, 3, 3, 73, 177, 70, 70, 70, 0, 177, 7, 77, 140, 147
+	.byte	177, 76, 0, 76, 7, 77, 147, 147, 177, 76, 0, 177, 161, 70, 34, 16
+	.byte	7, 7, 0, 76, 147, 76, 147, 147, 177, 76, 0, 76, 147, 147, 176, 70
+	.byte	34, 16, 0, 0, 30, 30, 0, 30, 30, 0, 0, 0, 70, 34, 16, 34
+	.byte	70, 0, 0, 0, 16, 34, 70, 34, 16, 0, 0, 0, 10, 34, 76, 66
+	.byte	42, 0, 0, 0, 42, 66, 76, 34, 10, 0, 0, 0, 140, 60, 30, 14
+	.byte	6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 34, 76, 147, 147, 177
+	.byte	147, 147, 0, 77, 147, 77, 147, 147, 147, 77, 0, 76, 147, 7, 7, 147
+	.byte	177, 76, 0, 37, 67, 147, 147, 67, 77, 37, 0, 177, 7, 77, 7, 7
+	.byte	177, 177, 0, 177, 7, 77, 7, 7, 7, 7, 0, 176, 7, 7, 167, 147
+	.byte	177, 176, 0, 147, 147, 177, 147, 147, 147, 147, 0, 76, 34, 34, 34, 34
+	.byte	76, 76, 0, 140, 140, 140, 140, 147, 176, 74, 0, 147, 67, 37, 37, 67
+	.byte	147, 147, 0, 7, 7, 7, 7, 7, 177, 177, 0, 143, 167, 177, 153, 143
+	.byte	143, 143, 0, 147, 157, 177, 177, 177, 167, 147, 0, 76, 143, 143, 143, 143
+	.byte	177, 76, 0, 77, 147, 147, 177, 77, 7, 7, 0, 76, 147, 147, 147, 67
+	.byte	176, 154, 0, 77, 147, 147, 77, 77, 147, 147, 0, 76, 7, 76, 140, 140
+	.byte	177, 77, 0, 177, 34, 34, 34, 34, 34, 34, 0, 147, 147, 147, 147, 147
+	.byte	177, 177, 0, 147, 147, 147, 147, 177, 76, 34, 0, 143, 143, 153, 177, 177
+	.byte	167, 143, 0, 147, 147, 74, 74, 147, 147, 147, 0, 143, 143, 76, 34, 34
+	.byte	34, 34, 0, 177, 70, 34, 16, 7, 177, 177
+
+	.even
+PPUEnd:
+
+Field = PPUStart
+FieldEnd = 40.*22.*2 + Field
+
+	.end	Start
+

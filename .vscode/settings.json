@@ -1,0 +1,16 @@
+{
+        "editor.semanticTokenColorCustomizations": {
+                "enabled": true, // enable for all themes
+                "rules": {
+                        "label": {
+                                "foreground": "#c0c0c0"
+                        }
+                }
+        },
+        "editor.tabSize": 8,
+        "editor.insertSpaces": false,
+        "editor.codeLens": false,
+	"editor.detectIndentation": false,
+	"explorer.sortOrder": "type",
+	"editor.wordBasedSuggestions": false
+}

@@ -1,0 +1,160 @@
+; set registers for vram usage
+SetVreg:
+	mov	#177010, R4		; R4 = vaddr reg
+	mov	#177012, R5		; R5 = vdata reg
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PRINT UTILS
+; //////////////////////////////////////////////////////////////////////////////
+
+; print string
+; R0 - text addr
+; R1 - vaddr
+; codes in string - [0..7] - change color
+PrintStr:
+	mov	#177010, R4		; R4 = vaddr reg
+	mov	#177024, R5		; R5 = vdata reg for output
+	mov	R1, (R4)		; set initial vaddr
+	mov	#7., @#177016		; default font color is white
+	clr	@#177020		; background is black
+	clr	@#177022
+	mov	#SCRWID, R2		; vaddr addition
+10$:	movb	(R0)+, R1		; get text byte (latin text only, or else need to clear upper byte)
+	beq	99$			; zero - exit
+	cmp	R1, #7.			; is it special symbol
+	bhi	20$
+	; change font color
+	mov	R1, @#177016
+	br	10$
+20$:	sub	#'0, R1			; relative to '0'
+	bge	30$
+	mov	#16., R1		; any chars below '0' converted to #16 (here its a space)
+30$:	asl	R1			; *8 bytes (character font size)
+	asl	R1
+	asl	R1
+	add	#FontPpuData, R1	; R1 = font data
+	.rept	8.			; out character
+	movb	(R1)+, R3
+	mov	R3, (R5)		; if use movb - it will be 'bis'
+	add	R2, (R4)
+	.endr
+	sub	#SCRWID*8.-1, (R4)	; advance vaddr
+	br	10$
+99$:	return 
+
+
+; ////////////////////////////////////////////////////////////////////
+; // Drawing 
+; ////////////////////////////////////////////////////////////////////
+
+; set vlines table initial vaddr (and adjust lines)
+; R0 - vaddr
+SetVLines:
+	mov	#VLinesField, R1
+	mov	#256./4, R3
+10$:	.rept	4
+	mov	R0, (R1)+
+	inc	R1
+	inc	R1
+	add	#SCRWID, R0
+	.endr
+	sob	R3, 10$
+	; emustudio fix - not needed on real UKNC
+	.rept	10.
+	mov	#136000, (R1)+	
+	inc	R1
+	inc	R1
+	.endr
+	return
+
+
+; R0 - vaddr, R1 - tile #
+DrawTile:
+	call	SetVreg
+	mov	R0, (R4)
+	ash	#4., R1			; *16 (tile size in ppu)
+	add	#TilesPpuData, R1
+	mov	#SCRWID, R2		; vaddr addition
+	.rept	16.
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	.endr
+	return
+
+
+; temporarily switch black to white
+BlackWhite:
+	; .word	^B1101110010011000	; 001010 YRGB for 011 010 001 000
+	; .word	^B1111111010111010	; 001012 YRGB for 111 110 101 100
+	mov	VLinesBegin, R0
+	bis	#^B111, VLinesBegin	; make black as white
+	; wait for vsync
+	mov	#VSyncCount2/2, @#177010
+	clr	@#177014
+10$:	mov	#VSyncCount2/2, @#177010
+	cmp	@#177014, #3
+	blo	10$
+	; restore palette
+	mov	R0, VLinesBegin
+	return
+
+
+MsgCave:	.asciz	<3>"CAVE:"<7>"X            "  ; with extra spaces to clear diamond numbers
+MsgDiaNeeded:	.asciz	<3>"000"
+MsgDiamonds:	.asciz	<7>"000"
+		.even
+
+DiaNeededSize:	.word	1
+
+; print upper string 'cave: X'
+; R0 - cave number, R1 - diamonds needed
+PrintCaveStr:
+	; save 'diamonds needed'
+	mov	R1, -(SP)
+	; print cave 
+	add	#'A, R0
+	movb	R0, MsgCave+7.
+	mov	#SCRWID*14.+1+VADDR, R1
+	mov	#MsgCave, R0
+	call	PrintStr
+	; diamonds needed (max are XXX)
+	mov	(SP)+, R0
+	mov	#MsgDiaNeeded+1, R5
+	call	Digits3
+	mov	R2, DiaNeededSize
+	; print it
+	mov	#SCRWID*14.+16.+VADDR, R1
+	mov	#MsgDiaNeeded, R0
+	call	PrintStr
+	return
+
+; put 3 digits string without trailing zeroes
+; R5 - where to put, R0 - number
+; returns R2 = number of actual digits
+Digits3:
+	movb	#^x20, (R5)+
+	movb	#^x20, (R5)+
+	movb	#^x20, (R5)+
+	clr	R2
+1$:	mov	R0, R1
+	clr	R0
+	inc	R2
+	div	#10., R0
+	add	#'0, R1
+	movb	R1, -(R5)
+	tst	R0
+	bne	1$
+	return
+
+; print current diamonds score
+; R0 - diamonds
+PrintDiamonds:
+	mov	#MsgDiamonds+1, R5
+	call	Digits3
+	; print it
+	mov	#SCRWID*14.+15.+VADDR, R1	; position
+	sub	DiaNeededSize, R1		; adjust with 'needed' size
+	mov	#MsgDiamonds, R0
+	call	PrintStr
+	return

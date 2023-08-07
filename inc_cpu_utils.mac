@@ -1,0 +1,1367 @@
+
+; //////////////////////////////////////////////////////////////////////////////
+; // CPU <-> PPU 
+; //////////////////////////////////////////////////////////////////////////////
+
+; PPU message
+PPMSG:	.word	PPARR			; address of beginning of array
+        .word	177777			; end of transmission
+
+; PPU data exchange array
+PPARR:	.byte	0			; return value (0 - OK)
+PPCMD:	.byte	0			; command
+	.word	32			; device type (32 - PPU mem)
+PPAPP:	.word	0			; address for PPU
+PPACP:	.word	0			; address for CPU
+PPLEN:	.word	0			; length in words
+
+; send command to PPU with exch array
+PPSEN:	mov	#PPMSG, R0		; array address
+	mov	#5, R1			; bytes to send+1 (sending from @#PP_MSG)
+	br	1$
+2$:	movb	(R0)+, @#176676
+1$:	tstb	@#176674		; test if we are ready to send
+	bpl	1$			; cycle if >= 0 (not set last bit in byte)
+	sob	R1, 2$
+	return
+
+; send and start PPU code
+; R4 - start addr in CPU
+; R5 - length / 2
+PPRUN:	movb	#1, PPCMD		; 1 - allocate memory
+	mov	R5, PPLEN
+	call	PPSEN			
+	; (!) warn - no testing for success (!)
+	movb	#20, PPCMD		; 20 - write to PPU mem
+	mov	R5, PPLEN
+	mov 	R4, PPACP
+	call	PPSEN
+	movb	#30, PPCMD		; 30 - run
+	call	PPSEN
+	return 
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU Loader
+; //////////////////////////////////////////////////////////////////////////////
+
+; (!) this code will run in PPU
+PPULoaderStart:
+	mtps	#200
+	clr	R0
+	call	@7132(R0)		; stop FD
+	; relocate code to the top of RAM
+	mov	PC, R0
+	add	#10$-., R0
+	mov	#77400, R1
+	mov	#200, R3
+	mov	(R0)+, (R1)+
+	sob	R3, .-2
+	jmp	@#77400
+10$:	; copy CPU VRAM -> PPU RAM
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	#100000, (R4)		; from vaddr = 100000
+	clr	R0			; to addr = 0
+	mov	#37600, R3		; 
+	mov	(R5), (R0)+
+	inc	(R4)
+	sob	R3, .-4
+	mov	#1000, SP		; stack on 1000
+	jmp	(SP)			; jump there
+PPULoaderEnd:
+
+; send PPU code to VRAM and start PPU Loader
+StartPPU:
+	; put PPU code to VRAM
+	call	SetVreg
+	; clear vram first
+	mov	#100000, (R4)
+	mov	#40000, R3
+	clr	(R5)
+	inc	(R4)
+	sob	R3, .-4
+	; copy end of file to vram
+	mov	#PPUStart, R0
+	mov	#PPUEnd-PPUStart/2, R3
+	mov	#100000, (R4)
+	mov	(R0)+, (R5)
+	inc	(R4)
+	sob	R3, .-4
+	; start PPU launcher code
+	mov	#PPULoaderStart, R4
+	mov	#<PPULoaderEnd-PPULoaderStart/2>, R5
+	call	PPRUN
+	; clear PPU command just in case
+	clr	PpuCommand
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Printing
+; //////////////////////////////////////////////////////////////////////////////
+
+; 4x5 numbers (aligned by 8 bytes)
+SprNumbers45:
+	.BYTE	7,5,5,5,7,0,0,0, 2,2,2,2,2,0,0,0
+	.BYTE	7,4,7,1,7,0,0,0, 7,4,6,4,7,0,0,0
+	.BYTE	5,5,7,4,4,0,0,0, 7,1,7,4,7,0,0,0
+	.BYTE	7,1,7,5,7,0,0,0, 7,4,4,4,4,0,0,0
+	.BYTE	7,5,7,5,7,0,0,0, 7,5,7,4,7,0,0,0
+	; shifted by 4 bit
+	.BYTE	160,120,120,120,160,0,0,0, 040,040,040,040,040,0,0,0
+	.BYTE	160,100,160,020,160,0,0,0, 160,100,140,100,160,0,0,0
+	.BYTE	120,120,160,100,100,0,0,0, 160,020,160,100,160,0,0,0
+	.BYTE	160,020,160,120,160,0,0,0, 160,100,100,100,100,0,0,0
+	.BYTE	160,120,160,120,160,0,0,0, 160,120,160,100,160,0,0,0
+	
+; print binary word (4x5 font), R0-word, R1-vram addr
+PrintBinaryWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#8., R3
+20$:	; first half of 8-pixels
+	mov	#SprNumbers45, R1	; sprite 0
+	asl	R0
+	bcc	30$
+	add	#8., R1			; sprite 1
+30$:	movb	(R1)+, (R5)		; using only plane 1
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#SCRWID*4, (R4)		; rewind vaddr
+	; second half - shifted sprites and BIS
+	mov	#<SprNumbers45+80.>, R1
+	asl	R0
+	bcc	40$
+	add	#8., R1
+40$:	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)	; .. and advance vaddr
+	sob	R3, 20$
+	return	
+ 
+; print octal word (4x5 font), R0 - word, R1-vram addr
+PrintOctalWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#3., R3
+	; 1st bit
+	clr	R1
+	br	22$
+20$:	; first half of 8-pixels
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+22$:	asl	R0
+	rol	R1	
+	; get normal spr addr
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#SprNumbers45, R1
+	; put bits
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#SCRWID*4, (R4)
+	; second half - shifted sprites and BIS
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	; get shifted spr adr
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#<SprNumbers45+80.>, R1
+	; put bits
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)		; advance vaddr to next byte
+	sob	R3, 20$
+	return	 
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Field initialize procedures
+; //////////////////////////////////////////////////////////////////////////////
+
+RandSeed1:	.word	0
+RandSeed2:	.word	0
+TempRand1:	.word	0
+TempRand2:	.word	0
+
+; Random from C64 version
+NextRandom:
+	; set TempRand1
+	mov	RandSeed1, R0			; LDA RandSeed1
+	rorb	R0				; ROR
+        rorb	R0				; ROR
+        bic	#^B1111111101111111, R0		; AND #$80
+        movb	R0, TempRand1			; STA TempRand1
+	; set TempRand2
+	mov	RandSeed2, R0			; LDA RandSeed2
+	rorb	R0				; ROR
+	bic	#^B1111111110000000, R0		; AND #$7F
+	movb	R0, TempRand2			; STA TempRand2
+	;
+	movb	RandSeed2, R0			; LDA RandSeed2
+	rorb	R0				; ROR
+	rorb	R0				; ROR
+	bic	#^B1111111101111111, R0		; AND #$80
+						; CLC
+	add	RandSeed2, R0			; ADC RandSeed2
+	cmp	#377, R0			; *** put C flag - cause we havent ADDB
+	bic	#^B1111111100000000, R0		; *** C flag not changing with BIC
+	adc	R0				; 
+	add	#23, R0				; ADC #0x13
+	cmp	#377, R0			; *** again put C flag, but now not need to clean upper
+	movb	R0, RandSeed2			; STA RandSeed2
+	mov	RandSeed1, R0			; LDA RandSeed1
+	adc	R0				;
+	add	TempRand1, R0			; ADC TempRand1
+	cmp	#377, R0			;
+	adc	R0				;
+	add	TempRand2, R0			; ADC TempRand2
+	movb	R0, RandSeed1			; STA RandSeed1
+	return
+
+; initial field filling
+FieldInit:
+	; fill with steel tile
+	mov	#Field, R0
+	mov	#FieldEnd-Field/2, R3
+	mov	#COBJ_STEEL, (R0)+
+	sob	R3, .-4
+	; level start addr
+	mov	Level, R0
+	asl	R0
+	mov	LevelsTable(R0), LevelAddr
+	; level color (tiles addition)
+	movb	@LevelAddr, LevelColor
+	inc	LevelAddr
+	; diamonds needed
+	movb	@LevelAddr, DiamondsNeeded
+	inc	LevelAddr
+	; random level value
+	clr	RandSeed1
+	movb	@LevelAddr, RandSeed2
+	inc	LevelAddr
+	; initial rectangle with random objects
+	mov	#Field+80., varAddr		; +40. words - starting at second line
+20$:	mov	#COBJ_DIRT, VarObject		; dirt object by default
+	call	NextRandom
+	mov	RandSeed1, R1
+	mov	LevelAddr, R5			; R5 - types
+	mov	R5, R0
+	add	#4., R0				; R0 - probabilities
+	mov	#4., R3
+30$:	cmpb	R1, (R0)+
+	bhis	40$
+	movb	(R5), VarObject
+40$:	inc	R5
+	sob	R3, 30$
+	; put object
+	mov	VarObject, @varAddr
+	add	#2, varAddr
+	cmp	varAddr, #FieldEnd-80.
+	blo	20$
+	; vertical steel lines
+	mov	#Field+80., R0
+	mov	#20., R3
+50$:	mov	#COBJ_STEEL, (R0)
+	add	#78., R0
+	mov	#COBJ_STEEL, (R0)+
+	sob	R3, 50$
+	; now process commands
+	add	#8., LevelAddr
+FieldCommands:
+	call	ClearTempVars
+10$:	; object + cmd [cmd 2-bits | object 6-bits]
+	movb	@LevelAddr, varObject
+	cmp	varObject, #377
+	beq	99$
+	mov	varObject, varCmd
+	bic	#^B1111111111000000, varObject
+	bic	#^B1111111100111111, varCmd
+	inc	LevelAddr
+	movb	@LevelAddr, varX
+	inc	LevelAddr
+	movb	@LevelAddr, varY
+	inc	LevelAddr
+	; is it just object?
+	cmp	#^B00000000, varCmd
+	bne	20$
+	call	PutObject
+	br	10$
+20$:	; is it a line?
+	cmp	#^B01000000, varCmd
+	bne	30$
+	movb	@LevelAddr, varLength
+	inc	LevelAddr
+	movb	@LevelAddr, varDir
+	inc	LevelAddr
+	call	PutLine
+	br	10$
+30$:	; filled rectangle?
+	cmp	#^B10000000, varCmd
+	bne	40$
+	movb	@LevelAddr, varDx
+	inc	LevelAddr
+	movb	@LevelAddr, varDy
+	inc	LevelAddr
+	movb	@LevelAddr, varFill
+	inc	LevelAddr
+	call	PutFilledRect
+	br	10$
+40$:	; rectangle?
+	cmp	#^B11000000, varCmd
+	bne	99$
+	movb	@LevelAddr, varDx
+	inc	LevelAddr
+	movb	@LevelAddr, varDy
+	inc	LevelAddr
+	call	PutRectangle
+	br	10$
+99$:	return
+
+; varX, varY to field addr
+PutCoordsR0:
+	mov	varX, R0
+	asl	R0
+	mov	varY, R1
+	mul	#80., R1
+	add	R1, R0
+	add	#Field, R0
+	return
+
+; puts just object into field
+PutObject:
+	call	PutCoordsR0
+	mov	varObject, (R0)
+	return
+
+tmpLineDirDX:	.word	0, 2, 2, 2, 0, -2, -2, -2
+tmpLineDirDY:	.word	-80., -80., 0, 80., 80., 80., 0, -80.
+
+; draws a line into field
+PutLine:
+	call	PutCoordsR0
+	mov	varDir, R1
+	asl	R1
+	mov	tmpLineDirDX(R1), R4
+	mov	tmpLineDirDY(R1), R5
+	mov	varLength, R3
+10$:	mov	varObject, (R0)
+	add	R4, R0
+	add	R5, R0
+	sob	R3, 10$
+	return
+
+; draws a rectangle into field
+PutRectangle:
+	; horizontal top
+	mov	#2., varDir
+	mov	varDx, varLength
+	call	PutLine
+	; horizontal bottom
+	add	varDy, varY
+	dec	varY
+	call	PutLine
+	; vertical left
+	clr	varDir
+	mov	varDy, varLength
+	call	PutLine
+	; vertical right
+	add	varDx, varX
+	dec	varX
+	call	PutLine
+	return
+
+; draws a filled rectangle into field
+PutFilledRect:
+	; fill inside
+	mov	varDx, R4
+	sub	#2, R4
+	asl	R4
+	mov	#80., R5
+	sub	R4, R5			; next line addition	
+	call	PutCoordsR0
+	add	#82., R0		; X++, Y++
+	mov	varDy, R3
+	dec	R3
+	dec	R3
+10$:	mov	varDx, R2
+	dec	R2
+	dec	R2
+20$:	mov	varFill, (R0)+
+	sob	R2, 20$
+	add	R5, R0
+	sob	R3, 10$	
+	; rect outside
+	call	PutRectangle
+	return
+
+; set 'changed' flag to all field
+FieldSetChanged:
+	mov	#Field, R0
+	mov	#FieldEnd-Field/2, R3
+	bis	#100000, (R0)+
+	sob	R3, .-4
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Drawing
+; //////////////////////////////////////////////////////////////////////////////
+
+; get screen starting vaddr from FieldX, FieldY
+GetFieldVideo:
+	mov	FieldX, R0
+	add	#VFieldAddr, R0
+	mov	FieldY, R1
+	mul	#SCRWID*16., R1
+	add	R1, R0
+	return
+
+; get field starting addr from FieldX, FieldY
+GetFieldAddr:
+	mov	FieldX, R0
+	asl	R0
+	mov	FieldY, R1
+	mul	#80., R1
+	add	R1, R0
+	add	#Field, R0
+	return
+
+; draws changed tiles in screen
+DrawChanged:
+	call	SetVreg
+	; field X Y to vaddr
+	call	GetFieldVideo
+	mov	R0, -(SP)
+	; get tile # addr
+	call	GetFieldAddr
+	mov	#SCRWID, R2
+	mov	#16., TempR3			; screen DY is 16. tiles
+10$:	mov	(SP), (R4)			; current tile line vaddr
+	mov	#20., R3			; screen DX is 20. tiles
+20$:	mov	(R0), R1
+	bit	#100000, R1			; check 'changed' flag
+	beq	30$
+	bic	#^B1111111111000000, R1		; 64. tiles maximum
+	; get tile #
+	asl	R1
+	mov	ObjectBaseTiles(R1), R1
+	beq	28$
+	; if it's colored
+	cmp	R1, #COLORED_ENDS
+	bhi	26$
+	add	LevelColor, R1
+	; if it's animated
+26$:	cmp	R1, #ANIMATED_BEGIN
+	blo	28$
+	bic	#^B11, R1
+	bis	AniCounter, R1
+28$:	; ask to draw in PPU
+	call	WaitPpu
+	mov	(R4), PpuR0
+	mov	R1, PpuR1
+	mov	#CmdDrawTile, PpuCommand
+	; draw in CPU
+	ash	#5., R1				; *32 (tile size in cpu)
+	add	#TilesCpuData, R1		; R1 = tile data addr
+	.rept	16.
+	mov	(R1)+, (R5)
+	add	R2, (R4)
+	.endr
+	sub	#SCRWID*16., (R4)		; rewind vaddr
+	bic	#100000, (R0)			; clear 'need to draw' flag
+30$:	; advance vaddr
+	inc	(R4)
+	; advance field addr
+	add	#2, R0
+	dec	R3
+	beq	40$
+	jmp	20$
+40$:	; 
+	add	#40., R0			; advance field addr to next line
+	add	#SCRWID*16., (SP)		; advance (SP) - vaddr to next line
+	; loop by Y
+	dec	TempR3
+	beq	99$
+	jmp	10$
+99$:	tst	(SP)+
+	return
+
+
+; update scroll box 
+; R5 - rockford absolute addr in field
+UpdateFieldXY:
+	mov	RockfordX, R1
+	mov	RockfordY, R2
+	; is it close to left?
+	mov	R1, R3
+	sub	FieldX, R3
+	cmp	R3, #4.
+	blt	10$
+	; is it close to right?
+	cmp	R3, #15.
+	bgt	10$
+	br	20$
+10$:	sub	#10., R1
+	mov	R1, NewFieldX
+20$:	; is it close to top?
+	mov	R2, R3
+	sub	FieldY, R3
+	cmp	R3, #3.
+	blt	30$
+	; is it close to bottom?
+	cmp	R3, #13.
+	bgt	30$	
+	br	50$
+30$:	sub	#8., R2
+	mov	R2, NewFieldY
+50$:	call	CorrectNewFieldXY
+	return
+
+; check new window coords out of screen
+CorrectNewFieldXY:
+	tst	NewFieldX
+	bge	10$
+	clr	NewFieldX
+10$:	cmp	NewFieldX, #20.
+	ble	20$
+	mov	#20., NewFieldX
+20$:	tst	NewFieldY
+	bge	30$
+	clr	NewFieldY
+30$:	cmp	NewFieldY, #6.
+	ble	40$
+	mov	#6., NewFieldY
+40$:	return
+
+; set current field X Y to window and redraw it
+RedrawScreen:
+	call	DrawChanged
+	call	GetFieldVideo
+	mov	R0, PpuR0
+	call	WaitPpu
+	mov	#CmdSetVLines, PpuCommand
+	call	WaitPpu
+	return 
+
+; scroll window to New X Y
+ScrollWindow:
+	clr	R0				; <>0 - need to scroll
+	cmp	FieldX, NewFieldX
+	beq	20$
+	blt	10$
+	dec	FieldX
+	inc	R0
+	br	20$
+10$:	inc	FieldX
+	inc	R0
+20$:	cmp	FieldY, NewFieldY
+	beq	40$
+	blt	30$
+	dec	FieldY
+	inc	R0
+	br	40$
+30$:	inc	FieldY
+	inc	R0
+40$:	tst	R0
+	beq	99$
+	; need to scroll - scroll with 25fps (50 is too fast)
+	call	VSyncWait2
+	; update field scroll
+	call	RedrawScreen
+	br	ScrollWindow
+99$:	return
+
+; update Rockford X Y from INBOX 
+UpdateRockfordXYInbox:
+	clr	RockfordX
+	clr	RockfordY
+	mov	#Field, R4
+	mov	#FieldEnd-Field/2, R3
+10$:	cmpb	(R4), #COBJ_INBOX
+	beq	20$
+	inc	R4
+	inc	R4
+	sob	R3, 10$
+	return
+20$:	call	UpdateRockfordXY
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Process field
+; //////////////////////////////////////////////////////////////////////////////
+
+ObjectBaseTiles:
+	.radix	10
+	;	 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+	.word	 0,  4,  7, 20,  1, 44,  1,  1, 24, 24, 24, 24, 24, 24, 24, 24		; 0
+	.word	10, 10, 10, 10, 16, 16, 16, 16,  0,  0,  0, 13, 13, 14, 15, 13		; 1
+	.word	13, 13, 14, 15, 18, 44, 13, 14, 15,  0,  0,  0,  0,  0,  0,  0		; 2
+	.word	28, 28, 28, 28, 28, 28, 28, 28, 48, 48, 32, 32, 36, 36, 40, 40		; 3
+	.radix	8
+
+; convert from scanned to normal objects
+ObjFromScanned:
+	.word	^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x08, ^x09, ^x0a, ^x0b
+	.word	^x00, ^x10, ^x00, ^x12,   ^x00, ^x14, ^x00, ^x16,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00
+	.word	^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00,   ^x00, ^x00, ^x00, ^x00
+	.word	^x00, ^x00, ^x00, ^x00,   ^x30, ^x31, ^x32, ^x33,   ^x00, ^x38, ^x00, ^x3A,   ^x00, ^x3C, ^x00, ^x3E
+
+; for butterflies and fireflies
+FromLeftClockwise:
+	.word	-2., -80., +2., +80.
+FromDownClockwise:
+	.word	+80., -2., -80., +2.
+
+; object processing addrs
+ProcessTable:
+	0, 			0, 			0, 			ProcessMagicWall			; 0x00 - 0x03
+	ProcessHiddenOutbox, 	ProcessInAndOutBoxes,  	0,			0					; 0x04 - 0x07
+	ProcessFirefly,   	ProcessFirefly,   	ProcessFirefly,   	ProcessFirefly				; 0x08 - 0x0B
+	0, 			0, 			0, 			0					; 0x0C - 0x0F
+	ProcessStationaryBoulder,   	0,   		ProcessFallingBoulder,  0					; 0x10 - 0x13
+	ProcessStationaryDiamond,   	0,	   	ProcessFallingDiamond, 	0   					; 0x14 - 0x17
+	0,		   	0,		   	0,		   	ProcessExplosionSpace  			; 0x18 - 0x1B
+	ProcessExplosionSpace, 	ProcessExplosionSpace, 	ProcessExplosionSpace, 	ProcessExplosionSpace  			; 0x1C - 0x1F
+   	ProcessExplosionDia,   	ProcessExplosionDia,   	ProcessExplosionDia,   	ProcessExplosionDia   			; 0x20 - 0x23
+   	ProcessExplosionDia,   	ProcessInAndOutBoxes,  	ProcessRockfordAppear,	ProcessRockfordAppear			; 0x24 - 0x27
+	ProcessRockfordAppear,	0,			0,			0   					; 0x28 - 0x2B
+	0,		   	0,		   	0,		   	0   					; 0x2C - 0x2F
+	ProcessButterfly,   	ProcessButterfly,   	ProcessButterfly,   	ProcessButterfly   			; 0x30 - 0x33
+	0, 			0, 			0, 			0					; 0x34 - 0x37
+	ProcessAmoeba,   	0,   			ProcessRockford,   	0   					; 0x38 - 0x3B
+	ProcessRockford,	0,			ProcessRockford, 	0					; 0x3C - 0x3F
+
+; main process field procedure
+;
+ProcessField:
+	; reset some vars
+	mov	AmoebaCurCount, AmoebaCount
+	clr	AmoebaCurCount
+	mov	AmoebaGrowing, AmoebaCanGrow
+	clr	AmoebaGrowing
+	; cycle field
+	mov	#Field+82., R5
+10$:	mov	(R5), R0
+	bic	#^B1111111111000000, R0
+	beq	20$
+	asl	R0
+	mov	ProcessTable(R0), R0
+	beq	20$
+	call	(R0)
+20$:	; convert previous
+	mov	-82.(R5), R0
+	bic	#^B1111111111000000, R0
+	beq	30$
+	asl	R0
+	mov	ObjFromScanned(R0), R0
+	beq	30$
+	movb	R0, -82.(R5)
+30$:	; advance addr
+	inc	R5
+	inc	R5
+	cmp	R5, #FieldEnd
+	blo	10$
+	return
+
+
+; level end - randomly clear objects, set 'need to draw' on animated
+ProcessFieldEndlevel:
+	; clear randomly some objects
+	mov	#50., R5			; maximum of trying
+	clr	R4				; objects to clear
+2$:	call	Random
+	ash	#-6., R0
+	bic	#^B1111110000000000, R0		; 0-1023.
+	; it's more than 880. (field size in units)
+	cmp	R0, #880.
+	blt	4$
+	sub	#880., R0
+4$:	asl	R0
+	bit	#100000, Field(R0)
+	bne	6$
+	inc	R4
+6$:	mov	#COBJ_STEEL+100000, Field(R0)
+	dec	R5
+	beq	8$
+	cmp	R4, #14.
+	blo	2$
+8$:	;
+	; set flag on animated 
+	mov	#Field+82., R5
+10$:	; check for animated
+	mov	(R5), R0
+	bic	#^B1111111111000000, R0
+	asl	R0
+	mov	ObjectBaseTiles(R0), R0
+	cmp	R0, #ANIMATED_BEGIN
+	blo	20$
+	bis	#100000, (R5)
+20$:	inc	R5
+	inc	R5
+	cmp	R5, #FieldEnd-82.
+	blo	10$
+	; scroll to somewhere
+	cmp	FieldX, #0
+	beq	30$
+	dec	FieldX
+30$:	cmp	FieldY, #0
+	beq	40$
+	dec	FieldY
+40$:
+	return
+
+
+ProcessInAndOutBoxes:
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:	; if it's inbox
+	cmpb	(R5), #COBJ_INBOX
+	bne	99$
+	; assume rockford is present
+	clr	NoRockford
+	; check timer
+	inc	InboxCount
+	cmp	InboxCount, #^B11000	; end of inboxing?
+	blt	99$
+	mov	#COBJ_PREROCKFORD_1+100000, (R5)
+	mov	#SND_EMERGE, CurrentSound
+99$:	return
+
+
+ProcessHiddenOutbox:
+	; if it's hidden outbox - change to outbox if exit was opened
+	tst	ExitOpened
+	beq	99$
+	mov	#COBJ_OUTBOX+100000, (R5)
+99$:	return
+
+
+ProcessMagicWall:
+	; it's animated - so need to update 'need to draw' flag 
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:	return
+
+
+; FIREFLY
+;
+ProcessFirefly:
+	; check it's explosion for contacting rockford or amebae
+	mov	#COBJ_EXP_SPACE_1+100000, R0	; will explode into space
+	movb	2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	2$
+	jmp	ExplodeCurrent
+2$:	movb	80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	3$
+	jmp	ExplodeCurrent
+3$:	movb	-2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	4$
+	jmp	ExplodeCurrent
+4$:	movb	-80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	5$
+	jmp	ExplodeCurrent
+5$:	;
+	; direction the firefly is facing: 0=left, 1=up, 2=right, 3=down
+	mov	(R5), R0
+	bic	#^B1111111111111100, R0
+	asl	R0
+	mov	R5, R4
+	add	FromDownClockwise(R0), R4
+	tstb	(R4)
+	bne	20$		; cant turn left
+	; turn left and move
+	asr	R0
+	add	#3, R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_FIREFLY_LEFT_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)	; clear current
+	br	90$
+20$:	; can't turn left
+	mov	R5, R4
+	add	FromLeftClockwise(R0), R4
+	tstb	(R4)
+	bne	30$		; cant move straight
+	; move straight
+	asr	R0
+	add	#COBJ_FIREFLY_LEFT_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)
+	br	90$
+30$:	; turn right but don't move
+	asr	R0
+	inc	R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_FIREFLY_LEFT_SCAN+100000, R0	; didn't moved, but still set 'need to draw'
+	mov	R0, (R5)
+90$:	return
+
+
+; BUTTERFLY
+;
+ProcessButterfly:
+	; check it's explosion for contacting rockford or amebae
+	mov	#COBJ_EXP_DIAMOND_1+100000, R0	; will explode into diamond
+	movb	2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	2$
+	jmp	ExplodeCurrent
+2$:	movb	80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	3$
+	jmp	ExplodeCurrent
+3$:	movb	-2(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	4$
+	jmp	ExplodeCurrent
+4$:	movb	-80.(R5), R1
+	cmp	R1, #COBJ_AMOEBA
+	blt	5$
+	jmp	ExplodeCurrent
+5$:	;
+	; direction the butterfly is facing: 0=down, 1=left, 2=up, 3=right
+	; same like firefly but with nother directions
+	mov	(R5), R0
+	bic	#^B1111111111111100, R0
+	asl	R0
+	mov	R5, R4
+	add	FromLeftClockwise(R0), R4
+	tstb	(R4)
+	bne	20$		; cant turn right
+	; turn right and move
+	asr	R0
+	inc	R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_BUTTERFLY_DOWN_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)	; clear current
+	br	90$
+20$:	; can't turn right
+	mov	R5, R4
+	add	FromDownClockwise(R0), R4
+	tstb	(R4)
+	bne	30$		; cant move straight
+	; move straight
+	asr	R0
+	add	#COBJ_BUTTERFLY_DOWN_SCAN+100000, R0
+	mov	R0, (R4)
+	mov	#100000, (R5)
+	br	90$
+30$:	; turn left but don't move
+	asr	R0
+	add	#3, R0
+	bic	#^B1111111111111100, R0
+	add	#COBJ_BUTTERFLY_DOWN_SCAN+100000, R0	; didn't moved, but still set 'need to draw'
+	mov	R0, (R5)
+90$:	return
+
+
+; BOULDER
+;
+ProcessStationaryBoulder:
+	; check if can fall
+	tstb	80.(R5)
+	bne	ProcessSlipperyBoulder
+	; fall immediately
+	mov	#100000, (R5)
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, 80.(R5)
+	return
+
+ProcessFallingBoulder:
+	; check if still can fall
+	movb	80.(R5), R0
+	bne	10$
+	mov	#100000, (R5)
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, 80.(R5)	
+	return
+10$:	mov	#SND_BOULDER, CurrentSound
+	; check if it hits rockford
+	cmp	R0, #COBJ_ROCKFORD
+	blt	20$						; (!) rockfords are last objects
+	; rockford explodes
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+20$:	; check if hits magic wall
+	cmp	R0, #COBJ_MAGIC
+	bne	30$
+	; clear current
+	mov	#100000, (R5)	
+	tstb	160.(R5)
+	beq	25$
+	return
+25$:	mov	#COBJ_DIAMOND_SCAN+100000, 160.(R5)
+	return
+30$:	; check if it hits firefly
+	bic	#^B111, R0
+	cmp	R0, #COBJ_FIREFLY_LEFT
+	bne	40$
+	; firefly explodes to space
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+40$:	; check if it hits butterfly
+	cmp	R0, #COBJ_BUTTERFLY_DOWN
+	bne	ProcessSlipperyBoulder
+	; butterfly explodes to diamonds
+	mov	#COBJ_EXP_DIAMOND_1+100000, R0
+	jmp	ExplodeBelow
+
+ProcessSlipperyBoulder:
+	; check if on slippery
+	cmpb	80.(R5), #COBJ_BOULDER
+	beq	50$
+	cmpb	80.(R5), #COBJ_DIAMOND
+	beq	50$
+	cmpb	80.(R5), #COBJ_BRICK
+	beq	50$
+	; not on slippery - convert to stationary scanned boulder
+20$:	movb	#COBJ_BOULDER_SCAN, (R5)
+	return
+50$:	; check if can fall left
+	tstb	-2(R5)
+	bne	60$
+	tstb	78.(R5)
+	bne	60$
+	; move left
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, -2(R5)
+	mov	#100000, (R5)
+	return
+60$:	; check if can fall right
+	tstb	2(R5)
+	bne	20$		; convert to stationary
+	tstb	82.(R5)
+	bne	20$
+	; move right
+	mov	#COBJ_BOULDER_FALL_SCAN+100000, 2(R5)
+	mov	#100000, (R5)
+	return
+
+
+; DIAMOND
+;
+ProcessStationaryDiamond:
+	; it's animated - so need to update 'need to draw' flag 
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:	; check if can fall
+	tstb	80.(R5)
+	bne	ProcessSlipperyDiamond
+	; fall immediately
+	mov	#100000, (R5)
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, 80.(R5)
+	return
+
+ProcessFallingDiamond:
+	; check if still can fall
+	movb	80.(R5), R0
+	bne	10$
+	mov	#100000, (R5)
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, 80.(R5)
+	return
+10$:	mov	#SND_DIAMOND, CurrentSound
+	; check if it hits rockford
+	cmp	R0, #COBJ_ROCKFORD
+	blt	20$						; (!) rockford's are last objects
+	; rockford explodes
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+20$:	; check if hits magic wall
+	cmp	R0, #COBJ_MAGIC
+	bne	30$
+	; clear current
+	mov	#100000, (R5)	
+	tstb	160.(R5)
+	beq	25$
+	return
+25$:	mov	#COBJ_BOULDER_SCAN+100000, 160.(R5)
+	return
+30$:	; check if it hits firefly
+	bic	#^B111, R0
+	cmp	R0, #COBJ_FIREFLY_LEFT
+	bne	40$
+	; firefly explodes to space
+	mov	#COBJ_EXP_SPACE_1+100000, R0
+	jmp	ExplodeBelow
+40$:	; check if it hits butterfly
+	cmp	R0, #COBJ_BUTTERFLY_DOWN
+	bne	ProcessSlipperyDiamond
+	; butterfly explodes to diamonds
+	mov	#COBJ_EXP_DIAMOND_1+100000, R0
+	jmp	ExplodeBelow
+
+ProcessSlipperyDiamond:
+	; check if on slippery
+	movb	80.(R5), R0
+	cmpb	R0, #COBJ_BOULDER
+	beq	50$
+	cmpb	R0, #COBJ_DIAMOND
+	beq	50$
+	cmpb	R0, #COBJ_BRICK
+	beq	50$
+10$:	; not on slippery - convert to stationary 
+	movb	#COBJ_DIAMOND_SCAN, (R5)
+	return
+50$:	; check if can fall left
+	tstb	-2(R5)
+	bne	60$
+	tstb	78.(R5)
+	bne	60$
+	; move left
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, -2(R5)
+	mov	#100000, (R5)
+	return
+60$:	; check if can fall right
+	tstb	2(R5)
+	bne	10$		; convert to stationary
+	tstb	82.(R5)
+	bne	10$
+	; move right
+	mov	#COBJ_DIAMOND_FALL_SCAN+100000, 2(R5)
+	mov	#100000, (R5)
+	return
+
+
+ProcessExplosionSpace:
+	movb	(R5), R0
+	inc	R0
+	cmp	R0, #COBJ_EXP_SPACE_4
+	bgt	10$
+	bis	#100000, R0
+	mov	R0, (R5)
+	return
+10$:	mov	#100000, (R5)
+	return
+
+
+ProcessExplosionDia:
+	movb	(R5), R0
+	inc	R0
+	cmp	R0, #COBJ_EXP_DIAMOND_4
+	bgt	10$
+	bis	#100000, R0
+	mov	R0, (R5)
+	return
+10$:	mov	#COBJ_DIAMOND+100000, (R5)
+	return
+
+
+ProcessRockfordAppear:
+	incb	(R5)
+	bis	#100000, (R5)
+	cmpb	(R5), #COBJ_PREROCKFORD_3+1
+	blt	99$
+	mov	#COBJ_ROCKFORD+100000, (R5)
+99$:	return
+
+
+; ROCKFORD
+;
+ProcessRockford:
+	; 'no rockford' timer
+	clr	NoRockford
+	; reset rockford direction
+	mov	#COBJ_ROCKFORD_SCAN, (R5)
+	; it's animated - so need to update 'need to draw' flag 
+	tst	Animation
+	beq	10$
+	bis	#100000, (R5)
+10$:	; need move right?
+	tst	KeyRight
+	beq	20$
+	mov	#+2., RockfordDir
+	call	ProcessRockfordDir
+	return
+20$:	; need move left?
+	tst	KeyLeft
+	beq	30$
+	mov	#-2., RockfordDir
+	call	ProcessRockfordDir
+	return
+30$:	; need move down?
+	tst	KeyDown
+	beq	40$
+	mov	#+80., RockfordDir
+	call	ProcessRockfordDir
+	return
+40$:	; need move up
+	tst	KeyUp
+	beq	50$
+	mov	#-80., RockfordDir
+	call	ProcessRockfordDir
+	return
+50$:	clr	BoulderMoving		; reset boulder moving time if not keys were pressed
+	mov	R5, R4
+	call	UpdateRockfordXY
+	return
+
+ProcessRockfordDir:
+	mov	R5, R4
+	add	RockfordDir, R4
+	movb	(R4), R0
+	bne	2$			; checks for a 'tick' sound
+	tst	KeyShift
+	bne	90$
+	mov	#SND_TICK, CurrentSound
+	br	90$			; empty - just move
+2$:	cmp	R0, #COBJ_DIRT		; dirt - play 'dirt' sound and move
+	bne	10$
+	; TODO: play sound 'dirt'
+	mov	#SND_DIRT, CurrentSound
+	br	90$
+10$:	cmp	R0, #COBJ_DIAMOND	; diamond - play 'eating' sound, increase diamonds, check for exit etc
+	beq	20$
+	cmp	R0, #COBJ_DIAMOND_SCAN	; scanned diamond - also need to be eaten
+	beq	20$
+	cmp	R0, #COBJ_OUTBOX	; outbox - next level
+	beq	30$
+	; not moving 
+	; need to test for movable boulder - only for left or right moves
+	; left move - use scanned boulder	
+	cmp	R0, #COBJ_BOULDER	; have boulder in path of moving?
+	beq	12$
+	cmp	R0, #COBJ_BOULDER_SCAN
+	beq	12$
+	br	18$			; no boulder on path
+12$:	; is it left or right?
+	mov	RockfordDir, R1
+	cmp	R1, #+2
+	bgt	18$
+	cmp	R1, #-2
+	blt	18$
+	; check moving time
+	cmp	BoulderMoving, #3
+	bge	14$
+	inc	BoulderMoving		; wait a bit
+	br	18$			; and not move
+14$:	clr	BoulderMoving
+	; check after boulder
+	mov	R4, R3
+	add	RockfordDir, R3		; next one on path
+	tstb	(R3)			; is it empty
+	bne	18$			; no - abort move boulder
+	; moving boulder
+	mov	#COBJ_BOULDER_SCAN+100000, (R3)
+	mov	#100000, (R4)
+	br	90$			; and maybe move rockford also
+	; not moving at all
+18$:	mov	R5, R4
+	br	90$
+20$:	; diamond
+	mov	#SND_DIAMOND, CurrentSound
+	inc	Diamonds
+	inc	DiamondsUpdate		; set 'need to update score' flag
+	; TODO: draw score
+	; TODO: check exit opening
+	br	90$
+30$:	; opened exit
+	inc	LevelCleared
+90$:	; get rockford facing left or right
+	mov	#COBJ_ROCKFORD_RIGHT_SCAN+100000, R0
+	cmp	RockfordDir, #-2
+	bne	91$
+	mov	#COBJ_ROCKFORD_LEFT_SCAN+100000, R0
+91$:	; do we holding shift?
+	tst	KeyShift
+	beq	92$
+	mov	#100000, (R4)
+	mov	R0, (R5)
+	br	99$
+92$:	mov	#100000, (R5)
+	mov	R0, (R4)
+	call	UpdateRockfordXY
+99$:	return
+
+UpdateRockfordXY:
+	clr	R0
+	mov	R4, R1
+	sub	#Field, R1
+	div	#80., R0		; R0 - Y
+	asr	R1			; R1 - X
+	mov	R1, RockfordX
+	mov	R0, RockfordY
+	return
+
+
+; AMOEBA
+;
+
+AmoebaGrowDir:	.word	+2., -80., -2., +80.
+
+ProcessAmoeba:
+	; if it can't grow
+	tst	AmoebaCanGrow
+	bne	10$
+	; it's size
+	cmp	AmoebaCount, #200.
+	bge	2$
+	mov	#COBJ_DIAMOND_SCAN+100000, (R5)
+	return
+2$:	mov	#COBJ_BOULDER_SCAN+100000, (R5)
+	return
+10$:	; animated
+	tst	Animation
+	beq	20$
+	bis	#100000, (R5)
+20$:	inc	AmoebaCurCount
+	; can it grow at all? (grow to dirt or space)
+	cmpb	2(R5), #1
+	blos	30$
+	cmpb	80.(R5), #1
+	blos	30$
+	cmpb	-2(R5), #1
+	blos	30$
+	cmpb	-80.(R5), #1
+	blos	30$
+	; can't grow - leave it
+	return
+30$:	inc	AmoebaGrowing
+	; select random time + direction for growing
+	call	Random
+	cmp	R0, #176000			; time to grow?
+	bhis	40$
+	return
+40$:	bic	#^B1111111111111100, R0		; direction
+	asl	R0
+	mov	AmoebaGrowDir(R0), R0
+	add	R5, R0
+	; check again if can grow there
+	cmpb	(R0), #1
+	blos	90$
+	return
+90$:	mov	#COBJ_AMOEBA_SCAN+100000, (R0)
+	return
+
+
+; create explosion below R5, object is R0
+ExplodeBelow:
+	mov	#SND_BOOM, CurrentSound
+	; 0
+	cmpb	-2(R5), #COBJ_STEEL
+	beq	10$
+	mov	R0, -2(R5)
+10$:	; 1
+	cmpb	(R5), #COBJ_STEEL
+	beq	20$
+	mov	R0, (R5)
+20$:	; 2 we must rewind explosion by 1 from here (cause it will be scanned just on this sweep)
+	dec	R0
+	cmpb	2(R5), #COBJ_STEEL
+	beq	30$
+	mov	R0, 2(R5)
+30$:	; 3
+	cmpb	78.(R5), #COBJ_STEEL
+	beq	40$
+	mov	R0, 78.(R5)
+40$:	; 4
+	cmpb	80.(R5), #COBJ_STEEL
+	beq	50$
+	mov	R0, 80.(R5)
+50$:	; 5
+	cmpb	82.(R5), #COBJ_STEEL
+	beq	60$
+	mov	R0, 82.(R5)
+60$:	; 6
+	cmpb	158.(R5), #COBJ_STEEL
+	beq	70$
+	mov	R0, 158.(R5)
+70$:	; 7
+	cmpb	160.(R5), #COBJ_STEEL
+	beq	80$
+	mov	R0, 160.(R5)
+80$:	; 8
+	cmpb	162.(R5), #COBJ_STEEL
+	beq	90$
+	mov	R0, 162.(R5)
+90$:
+	return
+
+
+; create explosion at R5, object is R0
+ExplodeCurrent:
+	mov	#SND_BOOM, CurrentSound
+	; 0
+	cmpb	-82.(R5), #COBJ_STEEL
+	beq	10$
+	mov	R0, -82.(R5)
+10$:	; 1
+	cmpb	-80.(R5), #COBJ_STEEL
+	beq	20$
+	mov	R0, -80.(R5)
+20$:	; 2
+	cmpb	-78.(R5), #COBJ_STEEL
+	beq	30$
+	mov	R0, -78.(R5)
+30$:	; 3
+	cmpb	-2.(R5), #COBJ_STEEL
+	beq	40$
+	mov	R0, -2.(R5)
+40$:	; 4
+	cmpb	(R5), #COBJ_STEEL
+	beq	50$
+	mov	R0, (R5)
+50$:	; 5 we must rewind explosion by 1 from here (cause it will be scanned just on this sweep)
+	dec	R0
+	cmpb	2(R5), #COBJ_STEEL
+	beq	60$
+	mov	R0, 2(R5)
+60$:	; 6
+	cmpb	78.(R5), #COBJ_STEEL
+	beq	70$
+	mov	R0, 78.(R5)
+70$:	; 7
+	cmpb	80.(R5), #COBJ_STEEL
+	beq	80$
+	mov	R0, 80.(R5)
+80$:	; 8
+	cmpb	82.(R5), #COBJ_STEEL
+	beq	90$
+	mov	R0, 82.(R5)
+90$:	; inc	DebugExplosion
+	return

@@ -1,0 +1,146 @@
+; //////////////////////////////////////////////////////////////////////////////
+; PPU commands constants
+; //////////////////////////////////////////////////////////////////////////////
+
+CmdClearScreen	  =  1.		; clear vram plane-0
+CmdUpdPalette	  =  2.		; set palette, cursor, resolution, luminance
+CmdFixWait	  =  3.		; write PPU empty cycles count to CPU
+CmdRtiToCpu	  =  4.		; write PPU empty INTs count to CPU
+CmdSetVLines      =  5.		; set vlines table initial addr
+CmdDrawTile       =  6.		; draw 8pix tile data
+CmdBlackWhite     =  7.		; switch palette to white temporarily (exit was opened)
+CmdPrintCaveStr   =  8.		; print 'cave: x' string 
+CmdPrintDiamonds  =  9.		; print current diamonds score
+CmdPlaySound      = 10.		; plays sound
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Drawing 
+; //////////////////////////////////////////////////////////////////////////////
+
+VADDR  = 100000			; lines table first line pointing to
+SCRWID = 40.			; screen width in 8-pix
+SCRHEI = 288.			; screen height
+
+VFieldAddr = 102400
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Objects
+; //////////////////////////////////////////////////////////////////////////////
+
+COBJ_SPACE 			= ^x00	; $00[.] - Space
+COBJ_DIRT			= ^x01	; $01[A] - Dirt
+COBJ_BRICK			= ^x02	; $02[B] - Brick wall
+COBJ_MAGIC			= ^x03	; $03[C] - Magic wall
+COBJ_HIDDEN_OUTBOX		= ^x04	; $04[D] - Hidden outbox
+COBJ_OUTBOX			= ^x05	; $05[E] - Outbox
+COBJ_FRAGILE_STEEL		= ^x06	; $06[F] - Fragile steel wall
+COBJ_STEEL			= ^x07	; $07[G] - Steel wall
+COBJ_FIREFLY_LEFT		= ^x08	; $08[H] - Firefly (left)
+COBJ_FIREFLY_UP			= ^x09	; $09[I] - Firefly (up)
+COBJ_FIREFLY_RIGHT		= ^x0A	; $0a[J] - Firefly (right)
+COBJ_FIREFLY_DOWN		= ^x0B	; $0b[K] - Firefly (down)
+COBJ_FIREFLY_LEFT_SCAN		= ^x0C	; $0c[L] - *Firefly (left)
+COBJ_FIREFLY_UP_SCAN		= ^x0D	; $0d[M] - *Firefly (up)
+COBJ_FIREFLY_RIGHT_SCAN		= ^x0E	; $0e[N] - *Firefly (right)
+COBJ_FIREFLY_DOWN_SCAN		= ^x0F	; $0f[O] - *Firefly (down)
+COBJ_BOULDER			= ^x10	; $10[P] - Boulder (stationary)
+COBJ_BOULDER_SCAN		= ^x11	; $11[Q] - *Boulder (stationary)
+COBJ_BOULDER_FALL		= ^x12	; $12[R] - Boulder (falling)
+COBJ_BOULDER_FALL_SCAN		= ^x13	; $13[S] - *Boulder (falling)
+COBJ_DIAMOND			= ^x14	; $14[T] - Diamond (stationary)
+COBJ_DIAMOND_SCAN		= ^x15	; $15[U] - *Diamond (stationary)
+COBJ_DIAMOND_FALL		= ^x16	; $16[V] - Diamond (falling)
+COBJ_DIAMOND_FALL_SCAN		= ^x17	; $17[W] - *Diamond (falling)
+COBJ_EXP_SPACE_0		= ^x1B	; $1b[[] - Explosion to space (stage 0) (to be scanned explosions start here)
+COBJ_EXP_SPACE_1		= ^x1C	; $1c[\] - Explosion to space (stage 1) (scanned explosions start here)
+COBJ_EXP_SPACE_2		= ^x1D	; $1d[]] - Explosion to space (stage 2)
+COBJ_EXP_SPACE_3		= ^x1E	; $1e[^] - Explosion to space (stage 3)
+COBJ_EXP_SPACE_4		= ^x1F	; $1f[_] - Explosion to space (stage 4)
+COBJ_EXP_DIAMOND_0		= ^x20	; $20[ ] - Explosion to diamond (stage 0) (to be scanned explosions start here)
+COBJ_EXP_DIAMOND_1		= ^x21	; $21[!] - Explosion to diamond (stage 1) (scanned explosions start here)
+COBJ_EXP_DIAMOND_2		= ^x22	; $22["] - Explosion to diamond (stage 2)
+COBJ_EXP_DIAMOND_3		= ^x23	; $23[#] - Explosion to diamond (stage 3)
+COBJ_EXP_DIAMOND_4		= ^x24	; $24[$] - Explosion to diamond (stage 4)
+COBJ_INBOX			= ^x25	; $25[%] - Inbox (Rockford's initial position)
+COBJ_PREROCKFORD_1		= ^x26	; $26[&] - Pre-Rockford (stage 1)
+COBJ_PREROCKFORD_2		= ^x27	; $27['] - Pre-Rockford (stage 2)
+COBJ_PREROCKFORD_3		= ^x28	; $28[(] - Pre-Rockford (stage 3)
+COBJ_BUTTERFLY_DOWN		= ^x30	; $30[0] - Butterfly (down)
+COBJ_BUTTERFLY_LEFT		= ^x31	; $31[1] - Butterfly (left)
+COBJ_BUTTERFLY_UP		= ^x32	; $32[2] - Butterfly (up)
+COBJ_BUTTERFLY_RIGHT		= ^x33	; $33[3] - Butterfly (right)
+COBJ_BUTTERFLY_DOWN_SCAN 	= ^x34	; $34[4] - *Butterfly (down)
+COBJ_BUTTERFLY_LEFT_SCAN 	= ^x35	; $35[5] - *Butterfly (left)
+COBJ_BUTTERFLY_UP_SCAN		= ^x36	; $36[6] - *Butterfly (up)
+COBJ_BUTTERFLY_RIGHT_SCAN 	= ^x37	; $37[7] - *Butterfly (right)
+
+COBJ_AMOEBA			= ^x38	; $38[:] - Amoeba
+COBJ_AMOEBA_SCAN		= ^x39	; $39[;] - *Amoeba
+COBJ_ROCKFORD			= ^x3A	; $3a[8] - Rockford
+COBJ_ROCKFORD_SCAN		= ^x3B	; $3b[9] - *Rockford
+COBJ_ROCKFORD_RIGHT      	= ^x3C  ; oh that's mine addition
+COBJ_ROCKFORD_RIGHT_SCAN 	= ^x3D
+COBJ_ROCKFORD_LEFT       	= ^x3E
+COBJ_ROCKFORD_LEFT_SCAN  	= ^x3F
+
+; it's tiles #, not objects #
+ANIMATED_BEGIN		= 16.
+COLORED_ENDS		= 12.
+
+; //////////////////////////////////////////////////////////////////////////////
+; // SOUND
+; //////////////////////////////////////////////////////////////////////////////
+
+SND_BOOM 	= 1
+SND_TICK 	= 2
+SND_BOULDER	= 3
+SND_DIAMOND 	= 4
+SND_EMERGE 	= 5
+SND_DIRT	= 6
+
+; //////////////////////////////////////////////////////////////////////////////	
+; // CPU<->PPU exchange variables
+; //////////////////////////////////////////////////////////////////////////////
+
+; Addrs are in CPU RAM - to use in PPU make sure they are <ADDR/2>
+
+; Keyboard
+Key8		= 157670	; Key 8
+Key7		= 157672	; key 7
+Key6		= 157674	; key 6
+Key5		= 157676	; key 5
+Key4		= 157700	; key 4
+Key3		= 157702	; key 3
+Key2		= 157704	; key 2
+Key1		= 157706	; key 1
+KeyK5		= 157710	; Key K5
+KeyK4		= 157712	; key K4
+KeyK3		= 157714	; key K3
+KeyK2		= 157716	; key K2
+KeyK1		= 157720	; key K1
+KeyStop		= 157722	; key STOP
+KeyUst		= 157724	; key UST
+KeyShift	= 157726	; key SHIFT
+KeyEnter	= 157730	; key ENTER
+KeySpace	= 157732	; key SPACE
+KeyRight	= 157734	; key ->
+KeyLeft		= 157736	; key <-
+KeyDown		= 157740	; key DOWN
+KeyUp		= 157742	; key UP
+KeyCombo	= 157744	; combo was pressed
+KeyAny		= 157746	; key 'anykey'
+KeyCurrent	= 157750	; current key
+
+; Misc
+PpuRtiCount2	= 157752	; interrupts count in PPU
+PpuWaitCount	= 157754	; PPU wait cycles number
+VSyncCount1	= 157756	; vsync 2 counter
+VSyncCount2	= 157760	; vsync 1 counter
+
+PpuR0		= 157762
+PpuR1		= 157764
+PpuR2		= 157766
+PpuR3		= 157770
+PpuR4		= 157772
+PpuR5		= 157774
+PpuCommand	= 157776	; PPU command

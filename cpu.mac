@@ -1,0 +1,447 @@
+	.title	CPU
+	.enabl	LC, AMA
+	.list	MEB
+	.asect
+	.=1000
+
+@include inc_common.mac
+
+Start:	mtps	#200
+	mov	#1000, SP
+
+	; launch code in PPU
+	call	StartPPU
+
+	; clear upper CPU RAM
+	mov	#PPUStart, R0
+	mov	#160000-PPUStart/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+
+	; prepare interrupt vectors
+	clr	R0
+	mov	#207, (R0)+		; addr 000000
+	clr	(R0)+			; addr 000002
+	mov	#117, R3		; addrs 000004 .. 000500
+10$:	mov	#RtiAdr, (R0)+
+	mov	#200, (R0)+
+	sob	R3, 10$
+	; clear stack data (and for what?)
+	mov	#1000-500/2, R3		; addrs 000500 .. 001000
+	clr	(R0)+
+	sob	R3, .-2
+
+	; clear screen planes 1,2
+	call	ClearScreen12
+
+	; ask for 'ppu ready'
+	mov	#177777, PpuCommand
+        ; wait for ackn of 'ppu ready'
+	tst	PpuCommand
+	bne	.-4
+
+	; vsync interrupt
+	mov	#VSync, @#100
+
+	; now all is set, allow interrupts
+	mtps	#0
+	clr	CurrentMode
+
+; main program cycle
+MainCycle:
+	call	VSyncWait		; vsync wait cycle
+	call	CheckStop		; STOP key - reset game
+	call	CheckColors		; K1 key - RGB/GRB
+	; key UST - pause
+	tst	KeyUst
+	beq	10$
+	clr	KeyUst
+	com	Pause
+10$:	tst	Pause
+	bne	MainCycle
+	; run procedures
+	mov	CurrentMode, R0
+	asl	R0
+	call	@MainCycleTable(R0)
+	; debug output
+	call	DebugInfo
+	jmp	MainCycle
+
+
+MainCycleTable:	
+	.word	MainReset		; 00. - reset
+	.word	MainMenu		; 01. - menu
+	.word	MainPrepare		; 02. - global prepare
+	.word	MainPrelevel		; 03. - level prepare
+	.word	MainLevel		; 04. - level play
+	.word	MainLevelEnd		; 05. - level ends
+
+
+; 00 - reset anything to a new
+MainReset:
+	; clear screen
+	call	WaitPpu
+	mov	#CmdClearScreen, PpuCommand
+	call	ClearScreen12
+	; init vars
+	clr	Level
+	; DEBUG:
+	mov	#10., Level
+	inc	CurrentMode
+	return
+
+; 01 - main menu
+MainMenu:
+	inc	CurrentMode
+	return
+
+
+; 02 - global prepare play
+MainPrepare:
+	inc	CurrentMode
+	return
+
+
+; 03 - level prepare
+MainPrelevel:
+	; set some vars
+	clr	Diamonds
+	clr	LevelCleared
+	clr	ExitOpened
+	mov	#1, AmoebaGrowing
+	clr	AmoebaCurCount
+	clr	InboxCount
+	clr	EmergingCount
+	; init field
+	call	FieldInit
+	call	FieldSetChanged
+	call	UpdateRockfordXYInbox
+	; center new screen on rockford
+	mov	RockfordX, NewFieldX
+	mov	RockfordY, NewFieldY
+	sub	#10., NewFieldX
+	sub	#8., NewFieldY
+	call	CorrectNewFieldXY
+	; upper strings and diamond numbers
+	call	WaitPpu
+	mov	Level, PpuR0
+	mov	DiamondsNeeded, PpuR1
+	mov	#CmdPrintCaveStr, PpuCommand
+	call	WaitPpu
+	mov	Diamonds, PpuR0
+	mov	#CmdPrintDiamonds, PpuCommand
+	; run it
+	inc	CurrentMode
+	return
+
+
+; 04 - play level
+MainLevel:
+	clr	DiamondsUpdate
+	clr	CurrentSound
+	call	ProcessField
+	call	WaitPpu
+	mov	CurrentSound, PpuR0
+	mov	#CmdPlaySound, PpuCommand
+	call	UpdateFieldXY
+	call	ScrollWindow
+	call	DrawChanged
+	; if we need to update diamonds score
+	tst	DiamondsUpdate
+	beq	2$
+	call	WaitPpu
+	mov	Diamonds, PpuR0
+	mov	#CmdPrintDiamonds, PpuCommand
+2$:	; if we have no rockford long enough - reset level
+	inc	NoRockford
+	cmp	NoRockford, #40.
+	ble	10$
+	; go to level prepare
+	dec	CurrentMode
+	br	99$
+10$:	; if we get enough diamonds and exit wasn't opened - open it
+	tst	ExitOpened
+	bne	20$
+	cmp	Diamonds, DiamondsNeeded
+	blo	20$
+	inc	ExitOpened
+	call	WaitPpu
+	mov	#SND_EMERGE, PpuR0
+	mov	#CmdPlaySound, PpuCommand
+	call	WaitPpu
+	mov	#CmdBlackWhite, PpuCommand
+	call	WaitPpu
+20$:	tst	LevelCleared
+	beq	30$
+	; level is finished
+	clr	InboxCount		; use it as a timer for level end wait cycle
+	call	FieldSetChanged		; mark all objects as 'need to draw'
+	inc	CurrentMode
+	br	99$
+30$:	; Key K5 - reset level
+	tst	KeyK5
+	beq	40$
+	clr	KeyK5
+	dec	CurrentMode
+	br	99$
+40$:
+	; = DEBUG =
+	tst	KeySpace
+	beq	99$
+	clr	KeySpace
+	clr	InboxCount
+	call	FieldSetChanged
+	inc	CurrentMode
+	; = DEBUG =
+99$:	; TODO: .. i forgot what 
+	return
+
+
+; 05 - level ends
+MainLevelEnd:
+	; wait some time
+	inc	InboxCount
+	cmp	InboxCount, #22.
+	bgt	90$
+	call	ProcessFieldEndlevel
+	call	DrawChanged
+	; scroll a bit
+	call	GetFieldVideo
+	mov	R0, PpuR0
+	call	WaitPpu
+	mov	#CmdSetVLines, PpuCommand
+	call	WaitPpu
+	;
+	return
+90$:	; advance level
+	inc	Level
+	cmp	Level, #19.
+	ble	92$
+	clr	Level
+92$:	; go to level prepare
+	mov	#03., CurrentMode
+	return
+
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // UTILS 
+; //////////////////////////////////////////////////////////////////////////////
+
+@include inc_cpu_utils.mac
+
+; 'empty' interrupt
+RtiAdr:	inc	(PC)+
+RtiCnt:	.word	0
+	rti
+
+; vsyinc interrupt
+VSync:	inc	VSyncCount1		; this one is used in CPU
+	inc	VSyncCount2		; this one is used in PPU for music
+	rti
+
+VSyncWait:	
+	clr	R0
+VSyncWait1:
+	inc	R0			; empty cycles counter
+	cmp	VSyncCount1, (PC)+	; check for n-th vsync
+VSyncX:	.word	6.			; 1 = 50Hz, 2 = 25Hz .. etc
+	blo	VSyncWait1
+	clr	VSyncCount1
+	mov	R0, CpuWaitCount
+	call	WaitPpu
+	mov	#CmdFixWait, PpuCommand	; get PPU empty (wait) cycles
+	inc	FrameCount
+	; game animations counters
+	bit	#^B11, FrameCount
+	clr	Animation
+	bne	10$
+	inc	Animation
+	inc	AniCounter
+	bic	#^B1111111111111100, AniCounter
+10$:
+	return
+
+; 50Hz wait vsync
+VSyncWait2:
+10$:	tst	VSyncCount1
+	beq	10$
+	clr	VSyncCount1
+20$:	tst	VSyncCount1
+	beq	20$
+	clr	VSyncCount1
+	return
+
+; registers for accessing vram (or ram12)
+SetVreg:
+	mov	#176640, R4
+	mov	#176642, R5
+	return	
+
+; waiting for ppu to be ready execute command
+WaitPpu:
+	tst	PpuCommand
+	bne	WaitPpu
+	return
+
+; random with linear-feedback shift register (Galois)
+; random -> R0
+Random:	clc
+	ror	(PC)+
+Lfsr00:	.word	126341 		; 0ACE1
+	bcc	Lfsr03
+	mov	(PC)+, R0
+Lfsr01:	.word	132000		; 0B400
+	xor	R0, Lfsr00
+Lfsr03:	mov	Lfsr00, R0
+	return
+
+; key STOP - restart all
+CheckStop:
+	tst	KeyStop
+	beq	99$
+	clr	KeyStop			; release STOP
+	clr	Pause			; unpause
+	clr	CurrentMode		; reset mode
+99$:	return
+
+; debug info
+DebugInfo:
+	tst	DebugMode
+	beq	99$
+	bit	#^B1111, FrameCount	; once in 16 frames
+	bne	99$
+	mov	#SCRWID+1+VADDR, R1
+	mov	KeyCurrent, R0		; pressed/released key
+	call	PrintBinaryWord
+	mov	#SCRWID+10.+VADDR, R1
+	mov	CpuWaitCount, R0	; remaining wait cycles 
+	call	PrintOctalWord
+	mov	#SCRWID+14.+VADDR, R1
+	mov	PpuWaitCount, R0	; remaining PPU wait cycles 
+	call	PrintOctalWord
+99$:	return
+
+; key K1 - RGB / GRB switch
+CheckColors:	
+	tst	KeyK1
+	beq	99$
+	clr	KeyK1
+	call	WaitPpu
+	com	RgbMode
+	bne	20$
+	mov	#^B1101110010011000, PpuR0 ; swap R&G bits
+	mov	#^B1111111010111010, PpuR1
+	mov	#^B0000000000010000, PpuR2
+	mov	#^B0000000000100111, PpuR3
+	br	90$
+20$:	mov	#^B1011101010011000, PpuR0 ; YRGB for 011 010 001 000
+	mov	#^B1111111011011100, PpuR1 ; YRGB for 111 110 101 100
+	mov	#^B0000000000010000, PpuR2 ; no cursor
+	mov	#^B0000000000100111, PpuR3 ; 160x288, max luminance
+90$:	mov	#CmdUpdPalette, PpuCommand
+99$:	return
+
+; clear temp vars
+ClearTempVars:
+	mov	#tempVarsStart, R0
+	mov	#tempVarsEnd-tempVarsStart/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	return
+
+; clear screen planes 1 and 2
+ClearScreen12:
+	call	SetVreg
+	mov	#100000, (R4)
+	mov	#40000, R3
+	clr	(R5)
+	inc	(R4)
+	sob	R3, .-4
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // DATA
+; //////////////////////////////////////////////////////////////////////////////
+
+CurrentMode:		.word	0
+DebugMode:		.word	177777
+RgbMode:		.word	0
+CpuWaitCount:		.word	0
+FrameCount:		.word	0
+Pause:			.word	0
+
+Level:			.word	0
+LevelAddr:		.word	0
+LevelColor:		.word	0
+LevelCleared:		.word	0
+DiamondsNeeded:		.word	0
+Diamonds:		.word	0
+DiamondsUpdate:		.word	0
+ExitOpened:		.word	0
+
+FieldX:			.word	0		; offset on screen by X-tiles
+FieldY:			.word	0		; offset on screen by Y-tiles
+NewFieldX:		.word	0
+NewFieldY:		.word	0
+
+Animation:		.word	0
+AniCounter:		.word	0
+InboxCount:		.word	0
+EmergingCount:		.word	0
+
+NoRockford:		.word	0
+RockfordX:		.word	0
+RockfordY:		.word	0
+RockfordDir:		.word	0
+BoulderMoving:		.word	0
+
+AmoebaCount:		.word	0
+AmoebaCurCount:		.word	0
+AmoebaCanGrow:		.word	0
+AmoebaGrowing:		.word	0
+
+CurrentSound:		.word	0
+
+; temp vars
+tempVarsStart:
+
+varAddr:		.word	0
+varObject:		.word	0
+varCmd:			.word	0
+varX:			.word	0
+varY:			.word	0
+varDx:			.word	0
+varDy:			.word	0
+varLength:		.word	0
+varDir:			.word	0
+varFill:		.word	0
+
+tempR0:			.word	0
+tempR1:			.word	0
+tempR2:			.word	0
+tempR3:			.word	0
+tempR4:			.word	0
+tempR5:			.word	0
+
+tempVarsEnd:
+
+@include inc_cpu_levels.mac
+@include inc_cpu_sprites.mac
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU Main code
+; //////////////////////////////////////////////////////////////////////////////
+
+; this data will be cleared from CPU after all preparations
+PPUStart:
+@include inc_cpu_ppu.mac
+	.even
+PPUEnd:
+
+; game field will be at CPU data end (it will be zeroed after loading)
+Field = PPUStart
+FieldEnd = 40.*22.*2 + Field
+
+
+	.end	Start

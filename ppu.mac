@@ -1,0 +1,411 @@
+	.title	PPU
+	.enabl	LC,AMA	; local labels, absolute addr mode
+	.list	MEB	; enable macro-extensions binary listing
+	.asect
+	.=0	; from address 0 (!)
+
+; 32-chars symbols length, allow underscore
+; ..\..\macro11\macro11.exe -ysl 32 -yus -m ..\..\macro11\sysmac.sml -l ppu.lst ppu.mac
+
+@include inc_common.mac
+@include inc_ppu_header.mac
+
+; ///////////////////////////////////////////////////////////
+; // PPU INIT
+; ///////////////////////////////////////////////////////////
+
+PPUMain:
+	mov	#1000, SP		; stack is 540..1000
+	mov	#361, @#177054		; set ROM banks as VRAM
+	call	CleaUp			; clear upper RAM	
+	mov	#100000, R0		; clear vram plane 0
+	mov	#177000-100000/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+
+	; wait for CPU asking to start phase 3
+	mov	#PpuCommand/2, @#177010
+	cmp     #177777, @#177014
+	bne	.-14
+
+	clr	@#177026		; allow write to all planes (for font output)
+	bic	#107, @#177066		; turn off interrupt on CPU-PPU channels
+	
+	; timers
+	bic	#^B0000001000000000, @#177054	; disable vsync in PPU
+	bis	#^B0000000100000000, @#177054	; enable vsync in CPU
+	call	TimerInit		; init pp timer
+	bic	#200, @#177716		; turn off sound generator
+
+	; set interrupts
+	mov	#INTKeyboard,  @#300	; keyboard interrupt
+	bis	#100, @#177700		; allow keyboard interrupts	
+
+        ; acknowledge start of phase 3
+	mov	#PpuCommand/2, @#177010
+	clr	@#177014
+
+	mtps	#0			; allow interrupts
+
+; //////////////////////////////////////////////////////////////////////////////
+; // MAIN PPU CYCLE
+; //////////////////////////////////////////////////////////////////////////////
+
+MainCycle:
+	call	CmdPro
+	br	MainCycle
+
+; process commands from CPU
+CmdPro:	mov	#PpuCommand/2, @#177010
+	tst	@#177014
+	bne	10$
+	inc	WaiPP0
+	return
+10$:	mov	#177010, R4
+	mov	#177014, R5
+	mov	#PpuR0/2, (R4)
+	mov	(R5), R0
+	inc	(R4)
+	mov	(R5), R1
+	inc	(R4)
+	mov	(R5), R2
+	inc	(R4)
+	mov	(R5), R3
+	; skip R4, R5
+	inc	(R4)
+	inc	(R4)
+	; get command
+	inc	(R4)
+	mov	(R5), R5
+	asl	R5
+	call	@CommandsTable(R5)
+	; clear command (mark as executed)
+	mov	#PpuCommand/2, @#177010
+	clr	@#177014
+	return
+
+; commands table
+CommandsTable:
+	.word	Error			; 00. can't be
+	.word	ClearScreen		; 01. clear screen plane-0
+	.word	PalUpd			; 02. set palette, cursor, resolution, luminance (R0,R1 - palette, R2,R3 - cursor, resolution, lumi)
+	.word	FxWait			; 03. write empty cycles count to CPU
+	.word	ReqRcn			; 04. write empty INTs count to CPU
+	.word	SetVLines		; 05. set vlines table initial vaddr
+	.word	DrawTile		; 06. draw 8pix tile
+	.word	BlackWhite		; 07. switch palette to white temporaroly (exit was opened)
+	.word	PrintCaveStr		; 08. print 'cave: x' string
+	.word	PrintDiamonds		; 09. print current diamonds score
+	.word	PlaySound		; 10. plays sound
+
+	
+; //////////////////////////////////////////////////////////////////////////////
+; // Procedures
+; //////////////////////////////////////////////////////////////////////////////
+
+; empty interrupt
+RtiAdr:	inc	(PC)+
+RtiCnt:	.word	0
+	rti
+
+; pp timer ready wait
+TimerInit:
+	clr	@#177710
+	tst	@#177714
+	tst	@#177710
+	bne	TimerInit
+	return
+
+; clear upper RAM
+CleaUp:	mov	#END, R0
+	mov	#100000-END/2, R2
+	clr	(R0)+
+	sob	R2, .-2
+	return
+
+; 01: clear screen plane 0
+ClearScreen:
+	mov	#VADDR, R5
+	mov	#SCRWID*384./2, R3		; total 384. lines
+10$:	clr	(R5)+
+	sob	R3, 10$
+	return
+	
+; 02: pallete, resolution, cursor, luminance change
+PalUpd:	mov	#VLinesBegin, R5
+	mov	R0, (R5)+
+	mov	R1, (R5)+
+	cmp	(R5)+, (R5)+
+	mov	R2, (R5)+
+	mov	R3, (R5)
+	return
+
+; 04: write empty cycles count to CPU
+WaiPP0:	.word	0		; PPU wait cycles counter
+FxWait:	mov	#<PpuWaitCount/2>, @#177010
+	mov	WaiPP0, @#177014
+	clr	WaiPP0
+	return
+
+; 05: request RTICNT to CPU
+ReqRcn:	mov	#<PpuRtiCount2/2>, @#177010
+	mov	RTICNT, @#177014
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // UTILS 
+; //////////////////////////////////////////////////////////////////////////////
+
+@include inc_ppu_utils.mac
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // sound and music
+; //////////////////////////////////////////////////////////////////////////////
+
+SoundAddr:	.word	0
+
+; start sound
+; R0 - sound #
+PlaySound:
+	mtps	#200
+	call	TimerInit
+	asl	R0
+	mov	SoundTable(R0), R0
+	beq	99$
+	mov	(R0)+, R1
+	beq	99$
+	mov	R0, SoundAddr
+	mov	R1, @#177712		; load counter
+	tst	@#177714
+	tst	@#177714
+	mov	#SoundIntLo, @#304	; set sound interrupt to LO
+	mov	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
+					; bits [2 1] 00 - 2, 01 - 4, 10 - 8, 11 - 16
+99$:	mtps	#0
+	return
+
+; sound timer interrupt (LO)
+SoundIntLo:
+	bic	#200, @#177716
+	mov	#SoundIntHi, @#304
+	br	SoundIntNext
+; sound timer interrupt (HI)
+SoundIntHi:
+	bis	#200, @#177716
+	mov	#SoundIntLo, @#304
+SoundIntNext:
+	mov	@SoundAddr, @#177712	; update timer
+	beq	90$			; end of sound?
+	add	#2, SoundAddr
+	tst	@#177714
+	tst	@#177714
+	rti
+90$:	clr	@#177710		; stop timer and ints
+	tst	@#177714
+	tst	@#177714
+	rti
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // KEYBOARD
+; //////////////////////////////////////////////////////////////////////////////
+
+; keyboard interrupt
+INTKeyboard:
+	mov	R0, -(SP)
+	mov	@#177702, R0		; (!) read this register ONLY ONCE
+	mov	R1, -(SP)
+	mov	R2, -(SP)
+	mov	R3, -(SP)
+	mov	R4, -(SP)
+	mov	R5, -(SP)
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	(R4), -(SP)		; save vaddr register 
+	; now R0-keycode, (R4)-vaddr, (R5)-vdata
+	mov	#KeyCurrent/2, (R4)
+	mov	R0, (R5)
+	bit	#^B10000000, R0		; key was released?
+	bne	50$
+	; 0 2 4 6 8 10 == dn,dn,up,up,dn,up ? -> combo is pressed
+	; put pressed keys to buffer
+	mov	#KeysBuffer, R1
+	mov	#KeysBuffer+1, R2
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	R0, (R1)+
+	; check for key buffer combo ^_^
+	mov	#6., R3
+2$:	cmpb	(R2)+, -(R1)
+	bne	4$
+	sob	R3, 2$	
+	mov	#KeyCombo/2, (R4)	; set 'combo is pressed'
+	inc	(R5)
+4$:	; -----------------
+	; == key pressed ==
+	mov	#KeyAny/2, (R4)		; 'anykey' is also pressed
+	inc	(R5)
+	mov	#KEYSDN, R1
+10$:	tst	(R1)
+	beq	90$
+	cmp	R0, (R1)+
+	beq	20$
+	add	#4, R1
+	br	10$
+20$:	; got our key
+	mov	(R1)+, (R4)		; set CPU addr
+	inc	(R5)			; must be mov #1,(R5) but its ok with inc
+	mov	(R1)+, (R4)
+	beq	90$	
+	clr	(R5)
+	br	90$
+50$:	; == key released - R0 = ^B1000xxxx
+	bic	#^B1111111111110000, R0
+	asl	R0
+	mov	KEYSUP+2(R0), R1	; finish addr
+	mov	KEYSUP(R0), R0		; start addr
+60$:	cmp	R0, R1			; finished?
+	bhis	90$
+	mov	(R0)+, (R4)		; set CPU addr
+	clr	(R5)			; and clear key
+	br	60$
+	;
+90$:	mov	(SP)+, (R4)
+	mov	(SP)+, R5
+	mov	(SP)+, R4
+	mov	(SP)+, R3
+	mov	(SP)+, R2
+	mov	(SP)+, R1
+	mov	(SP)+, R0
+	rti
+
+; keys release - clear addrs
+KEYSUP:	.word	KUP0000, KUP0001, KUP0010, KUP0011, KUP0100, KUP0101, KUP0110, KUP0111
+	.word	KUP1000, KUP1001, KUP1010, KUP1011, KUP1100, KUP1101, KUP1110, KUP1111
+	.word	KUP7777
+KUP0000:
+KUP0001:
+KUP0010:
+KUP0011:
+KUP0100:	.word	KeyStop/2
+KUP0101:	.word	KeyShift/2
+KUP0110:
+KUP0111:
+KUP1000:	.word	Key1/2, KeyK1/2
+KUP1001:	.word	Key2/2, KeyK2/2
+KUP1010:	.word	Key3/2, KeyUst/2, KeyK3/2
+KUP1011:	.word	Key4/2, KeySpace/2, KeyRight/2
+KUP1100:	.word	Key5/2, KeyDown/2, KeyUp/2, KeyK4/2
+KUP1101:	.word	Key6/2, KeyK5/2
+KUP1110:	.word	Key7/2, KeyLeft/2
+KUP1111:	.word	Key8/2
+KUP7777:
+
+; keys press - set 1st addr, clear second
+KEYSDN:	.word	^B00000100, KeyStop/2,		0
+	.word	^B01101010, KeyUst/2,		0
+	.word	^B00011000, Key1/2,		0
+	.word	^B00011001, Key2/2,		0
+	.word	^B00011010, Key3/2,		0
+	.word	^B00001011, Key4/2,		0
+	.word	^B00011100, Key5/2,		0
+	.word	^B00011101, Key6/2,		0
+	.word	^B00001110, Key7/2,		0
+	.word	^B00001111, Key8/2,		0
+	.word	^B01001011, KeySpace/2,		0
+	.word	^B01011100, KeyDown/2,		KeyUp/2
+	.word	^B01101100, KeyUp/2,		KeyDown/2
+	.word	^B01001110, KeyLeft/2, 		KeyRight/2
+	.word	^B01011011, KeyRight/2,		KeyLeft/2
+	.word	^B00001000, KeyK1/2,		0
+	.word	^B00001001, KeyK2/2,		0
+	.word	^B00001010, KeyK3/2,		0
+	.word	^B00001100, KeyK4/2,		0
+	.word	^B00001101, KeyK5/2,		0
+	.word	^B01000101, KeyShift/2,		0
+	.word	0
+	
+KeysBuffer:	.BLKB	6				; last 6 keys
+		.BYTE	154, 134, 154, 154, 134, 134	; dn,dn,up,up,dn,up written backwards
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU ERROR - TODO ?? DEBUG INFO ??
+; //////////////////////////////////////////////////////////////////////////////
+
+Error:	mtps	#200			; stop interrupts? do we need it?
+	br	.
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU DATA SECTION //////////////////////////////////////////////////////////
+; //////////////////////////////////////////////////////////////////////////////
+
+
+; // SOUND & MUSIC /////////////////////////////////////////////////////////////
+
+.radix 10
+
+SoundTable:
+	.word	0, Sound001, Sound002, Sound003, Sound004, Sound005, Sound006
+
+; boom
+Sound001:
+	.word	859, 506, 511, 507, 1527, 510, 508, 509, 509, 1526, 510, 1017, 510, 2033, 1021
+	.word	1015, 1529, 2002, 495, 491, 1973, 494, 984, 495, 984, 988, 968, 480, 475, 1909, 1431
+	.word	478, 1906, 1879, 4004, 2230, 1826, 497, 2460, 1484, 490, 496, 1475, 990, 919, 926, 458
+	.word	2307, 462, 921, 463, 460, 462, 921, 1242, 413, 827, 414, 413, 1240, 1654, 827, 2097
+	.word	863, 855, 433, 855, 1291, 428, 431, 428, 430, 429, 859, 429, 1383, 1384, 1383, 924
+	.word	461, 922, 462, 460, 462, 461, 398, 1191, 1194, 397, 796, 795, 1192, 399, 1191, 400
+	.word	3287, 420, 1647, 421, 1233, 834, 1679, 436, 853, 1293, 855, 433, 426, 433, 426, 432
+	.word	427, 861, 1810, 926, 458, 1846, 462, 461, 922, 922, 462, 1763, 798, 395, 1195, 397
+	.word	398, 397, 1590, 399, 396, 399, 396, 812, 413, 414, 826, 2481, 415, 825, 829, 412
+	.word	0
+
+; ticks (step on space)
+Sound002:
+	.word	60,60,0
+
+; boulder
+Sound003:
+	.word	81, 65, 87, 65, 146, 59, 66, 61, 102, 61, 88, 66, 86, 67, 100, 40
+	.word	488, 2352, 1432, 1096, 544, 520, 528, 496, 1160, 520, 536, 363
+	.word	0
+
+; diamond
+Sound004:
+	.word	86, 45, 68, 57, 67, 58, 67, 57, 68, 57, 67, 58, 67, 58, 67, 57
+	.word	67, 58, 67, 58, 67, 57, 68, 57, 67, 58, 67, 58, 67, 57, 68, 57
+	.word	67, 58, 67, 58, 67, 57, 67, 58, 67, 58, 67, 57, 68, 57, 67, 58
+	.word	67, 58, 67, 57, 67, 58, 67, 58, 67, 57, 68, 57, 67, 58, 67, 74 
+	.word	0
+
+; emerging
+Sound005:
+	.word	14, 84, 57, 89, 63, 95, 74, 97, 85, 105, 90, 112, 101, 116, 109
+	.word	122, 118, 128, 125, 136, 134, 141, 142, 148, 149, 156, 157, 162, 164, 169, 172
+	.word	176, 96
+	.word	0
+
+; dirt
+Sound006:
+	.word	194, 79, 37, 26, 75, 25, 210
+	.word	41, 37, 76, 26, 52
+	.word	0
+
+
+
+.radix 8
+
+; // GRAPHICS //////////////////////////////////////////////////////////////////
+
+@include inc_ppu_sprites.mac
+@include inc_ppu_font.mac
+
+END:
+; RAM will be cleared after this
