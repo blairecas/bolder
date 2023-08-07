@@ -1,0 +1,9 @@
+*.lst
+*.obj
+*.dat
+*.zip
+*.bin
+_cpu.mac
+_ppu.mac
+system.dsk
+rt11.exe
