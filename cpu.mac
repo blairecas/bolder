@@ -85,8 +85,6 @@ MainReset:
 	call	ClearScreen12
 	; init vars
 	clr	Level
-	; DEBUG:
-	mov	#10., Level
 	inc	CurrentMode
 	return
 
