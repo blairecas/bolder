@@ -12,6 +12,8 @@ CmdBlackWhite     =  7.		; switch palette to white temporarily (exit was opened)
 CmdPrintCaveStr   =  8.		; print 'cave: x' string 
 CmdPrintDiamonds  =  9.		; print current diamonds score
 CmdPlaySound      = 10.		; plays sound
+CmdPrintMenu      = 11.		; print menu strings
+CmdUpdateMenu     = 12.		; update changeable menu items
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Drawing 

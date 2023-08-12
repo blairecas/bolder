@@ -97,6 +97,8 @@ CommandsTable:
 	.word	PrintCaveStr		; 08. print 'cave: x' string
 	.word	PrintDiamonds		; 09. print current diamonds score
 	.word	PlaySound		; 10. plays sound
+	.word	PrintMenu		; 11. print menu strings
+	.word	UpdateMenu		; 12. update changeable menu items
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -164,6 +166,7 @@ ReqRcn:	mov	#<PpuRtiCount2/2>, @#177010
 ; // sound and music
 ; //////////////////////////////////////////////////////////////////////////////
 
+NoSound:	.word	0
 SoundAddr:	.word	0
 
 ; start sound
@@ -171,6 +174,8 @@ SoundAddr:	.word	0
 PlaySound:
 	mtps	#200
 	call	TimerInit
+	tst	NoSound
+	bne	99$
 	asl	R0
 	mov	SoundTable(R0), R0
 	beq	99$
@@ -180,7 +185,8 @@ PlaySound:
 	mov	R1, @#177712		; load counter
 	tst	@#177714
 	tst	@#177714
-	mov	#SoundIntLo, @#304	; set sound interrupt to LO
+	bic	#200, @#177716		; sound to LO
+	mov	#SoundIntHi, @#304	; set sound interrupt to HI
 	mov	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
 					; bits [2 1] 00 - 2, 01 - 4, 10 - 8, 11 - 16
 99$:	mtps	#0
@@ -369,7 +375,7 @@ Sound001:
 
 ; ticks (step on space)
 Sound002:
-	.word	60,60,0
+	.word	60,0
 
 ; boulder
 Sound003:
@@ -379,11 +385,15 @@ Sound003:
 
 ; diamond
 Sound004:
-	.word	86, 45, 68, 57, 67, 58, 67, 57, 68, 57, 67, 58, 67, 58, 67, 57
-	.word	67, 58, 67, 58, 67, 57, 68, 57, 67, 58, 67, 58, 67, 57, 68, 57
-	.word	67, 58, 67, 58, 67, 57, 67, 58, 67, 58, 67, 57, 68, 57, 67, 58
-	.word	67, 58, 67, 57, 67, 58, 67, 58, 67, 57, 68, 57, 67, 58, 67, 74 
+	.word	216, 184, 192, 184, 184, 192, 184, 192, 176, 200, 176, 208
+	.word	168, 216, 160, 224
 	.word	0
+
+;	.word	86, 45, 68, 57, 67, 58, 67, 57, 68, 57, 67, 58, 67, 58, 67, 57
+;	.word	67, 58, 67, 58, 67, 57, 68, 57, 67, 58, 67, 58, 67, 57, 68, 57
+;	.word	67, 58, 67, 58, 67, 57, 67, 58, 67, 58, 67, 57, 68, 57, 67, 58
+;	.word	67, 58, 67, 57, 67, 58, 67, 58, 67, 57, 68, 57, 67, 58, 67, 74 
+;	.word	0
 
 ; emerging
 Sound005:

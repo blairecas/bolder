@@ -3,7 +3,7 @@
 *.dat
 *.zip
 *.bin
-_cpu.mac
-_ppu.mac
+_*.*
+tables.txt
 system.dsk
 rt11.exe

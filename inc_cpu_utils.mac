@@ -1187,6 +1187,7 @@ ProcessRockfordDir:
 	tstb	(R3)			; is it empty
 	bne	18$			; no - abort move boulder
 	; moving boulder
+	mov	#SND_BOULDER, CurrentSound
 	mov	#COBJ_BOULDER_SCAN+100000, (R3)
 	mov	#100000, (R4)
 	br	90$			; and maybe move rockford also

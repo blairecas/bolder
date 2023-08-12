@@ -83,15 +83,59 @@ MainReset:
 	call	WaitPpu
 	mov	#CmdClearScreen, PpuCommand
 	call	ClearScreen12
+	; reset vlines
+	clr	FieldX
+	clr	FieldY
+	clr	NewFieldX
+	clr	NewFieldY
+	call	WaitPpu
+	mov	#VFieldAddr, PpuR0
+	mov	#CmdSetVLines, PpuCommand
 	; init vars
-	clr	Level
+	; draw main menu
+	call	WaitPpu
+	mov	#CmdPrintMenu, PpuCommand
+	call	WaitPpu
+	mov	Level, PpuR0
+	mov	NoSound, PpuR1
+	mov	#CmdUpdateMenu, PpuCommand
+	; start menu
+	mov	#1, VSyncX			; menu fps is 50. (for keys to be pressed normally)
 	inc	CurrentMode
 	return
 
 ; 01 - main menu
 MainMenu:
+	; space - run game
+	tst	KeySpace
+	beq	10$
+	clr	KeySpace
+	mov	#6., VSyncX			; game fps are much slower than in menu
 	inc	CurrentMode
 	return
+10$:	; left - decrease level
+	tst	KeyLeft
+	beq	20$
+	clr	KeyLeft
+	tst	Level
+	ble	20$
+	dec	Level
+	jmp	MenuChanged
+20$:	; right - increase level
+	tst	KeyRight
+	beq	30$
+	clr	KeyRight
+	cmp	Level, #19.
+	bge	30$
+	inc	Level
+	jmp	MenuChanged
+30$:	; K2 - sound on off
+	tst	KeyK2
+	beq	40$
+	clr	KeyK2
+	com	NoSound
+	jmp	MenuChanged
+40$:	return
 
 
 ; 02 - global prepare play
@@ -184,12 +228,12 @@ MainLevel:
 	br	99$
 40$:
 	; = DEBUG =
-	tst	KeySpace
-	beq	99$
-	clr	KeySpace
-	clr	InboxCount
-	call	FieldSetChanged
-	inc	CurrentMode
+	; tst	KeySpace
+	; beq	99$
+	; clr	KeySpace
+	; clr	InboxCount
+	; call	FieldSetChanged
+	; inc	CurrentMode
 	; = DEBUG =
 99$:	; TODO: .. i forgot what 
 	return
@@ -220,6 +264,17 @@ MainLevelEnd:
 	mov	#03., CurrentMode
 	return
 
+
+; update menu with changes
+MenuChanged:
+	call	WaitPpu
+	mov	#SND_TICK, PpuR0
+	mov	#CmdPlaySound, PpuCommand
+	call	WaitPpu
+	mov	Level, PpuR0
+	mov	NoSound, PpuR1
+	mov	#CmdUpdateMenu, PpuCommand
+	return
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -368,6 +423,7 @@ RgbMode:		.word	0
 CpuWaitCount:		.word	0
 FrameCount:		.word	0
 Pause:			.word	0
+NoSound:		.word	0
 
 Level:			.word	0
 LevelAddr:		.word	0

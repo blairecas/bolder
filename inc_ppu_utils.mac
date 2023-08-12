@@ -158,3 +158,70 @@ PrintDiamonds:
 	mov	#MsgDiamonds, R0
 	call	PrintStr
 	return
+
+; 1 - blue, 2 - green, 3 - cyan, 4 - red, 5 - magenta, 6 - yellow
+MsgMenu001:	.asciz	<7>"  K1"<1>": "<4>"R"<2>"G"<1>"B"<1>"?"<2>"G"<4>"R"<1>"B"
+MsgMenu002:	.asciz	<7>"  K2"<1>": "<6>"SOUND "
+MsgMenu003:	.asciz	<7>"  K5"<1>": "<6>"LEVEL RESET"
+MsgMenu004:	.asciz	<7>" UST"<1>": "<6>"PAUSE"
+MsgMenu005:	.asciz	<7>"STOP"<1>": "<6>"MENU"
+MsgMenu006:	.asciz	<3>"  PRESS "<7>"SPACE"
+
+MsgMenu010:	.asciz	<1>"SELECT CAVE"<1>":"
+MsgMenu011:	.asciz	<7>"A"
+
+MsgMenu020:	.asciz	<7>"ON "
+MsgMenu021:	.asciz	<7>"OFF"
+	.even
+
+; print main menu text
+PrintMenu:
+	; select cave
+	mov	#SCRWID*160.+3+VADDR, R1
+	mov	#MsgMenu010, R0
+	call	PrintStr
+	; K1
+	mov	#SCRWID*180.+2+VADDR, R1
+	mov	#MsgMenu001, R0
+	call	PrintStr
+	; K2
+	mov	#SCRWID*192.+2+VADDR, R1
+	mov	#MsgMenu002, R0
+	call	PrintStr
+	; K5
+	mov	#SCRWID*204.+2+VADDR, R1
+	mov	#MsgMenu003, R0
+	call	PrintStr
+	; UST
+	mov	#SCRWID*216.+2+VADDR, R1
+	mov	#MsgMenu004, R0
+	call	PrintStr
+	; STOP
+	mov	#SCRWID*228.+2+VADDR, R1
+	mov	#MsgMenu005, R0
+	call	PrintStr
+	; START
+	mov	#SCRWID*252.+2+VADDR, R1
+	mov	#MsgMenu006, R0
+	call	PrintStr
+	return
+
+
+; update changeable menu items
+; R0 - Level, R1 - Nosound
+UpdateMenu:
+	mov	R1, NoSound
+	; level char
+	add	#'A, R0
+	movb	R0, MsgMenu011+1
+	mov	#SCRWID*160.+16.+VADDR, R1
+	mov	#MsgMenu011, R0
+	call	PrintStr
+	; sound on off
+	mov	#MsgMenu020, R0
+	tst	NoSound
+	beq	10$
+	mov	#MsgMenu021, R0
+10$:	mov	#SCRWID*192.+14.+VADDR, R1
+	call	PrintStr
+	return
