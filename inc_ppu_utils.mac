@@ -177,31 +177,31 @@ MsgMenu021:	.asciz	<7>"OFF"
 ; print main menu text
 PrintMenu:
 	; select cave
-	mov	#SCRWID*160.+3+VADDR, R1
+	mov	#SCRWID*160.+12.+VADDR, R1
 	mov	#MsgMenu010, R0
 	call	PrintStr
 	; K1
-	mov	#SCRWID*180.+2+VADDR, R1
+	mov	#SCRWID*180.+12.+VADDR, R1
 	mov	#MsgMenu001, R0
 	call	PrintStr
 	; K2
-	mov	#SCRWID*192.+2+VADDR, R1
+	mov	#SCRWID*192.+12.+VADDR, R1
 	mov	#MsgMenu002, R0
 	call	PrintStr
 	; K5
-	mov	#SCRWID*204.+2+VADDR, R1
+	mov	#SCRWID*204.+12.+VADDR, R1
 	mov	#MsgMenu003, R0
 	call	PrintStr
 	; UST
-	mov	#SCRWID*216.+2+VADDR, R1
+	mov	#SCRWID*216.+12.+VADDR, R1
 	mov	#MsgMenu004, R0
 	call	PrintStr
 	; STOP
-	mov	#SCRWID*228.+2+VADDR, R1
+	mov	#SCRWID*228.+12.+VADDR, R1
 	mov	#MsgMenu005, R0
 	call	PrintStr
 	; START
-	mov	#SCRWID*252.+2+VADDR, R1
+	mov	#SCRWID*252.+12.+VADDR, R1
 	mov	#MsgMenu006, R0
 	call	PrintStr
 	return
@@ -214,7 +214,7 @@ UpdateMenu:
 	; level char
 	add	#'A, R0
 	movb	R0, MsgMenu011+1
-	mov	#SCRWID*160.+16.+VADDR, R1
+	mov	#SCRWID*160.+25.+VADDR, R1
 	mov	#MsgMenu011, R0
 	call	PrintStr
 	; sound on off
@@ -222,6 +222,15 @@ UpdateMenu:
 	tst	NoSound
 	beq	10$
 	mov	#MsgMenu021, R0
-10$:	mov	#SCRWID*192.+14.+VADDR, R1
+10$:	mov	#SCRWID*192.+24.+VADDR, R1
 	call	PrintStr
+	return
+
+
+; part of screen need be with filled plane-0
+BlueLogo:
+	mov	#VADDR, R0
+	mov	#8.*17.*20., R3
+	mov	#177777, (R0)+
+	sob	R3, .-4
 	return

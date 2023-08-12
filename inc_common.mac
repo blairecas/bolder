@@ -3,17 +3,19 @@
 ; //////////////////////////////////////////////////////////////////////////////
 
 CmdClearScreen	  =  1.		; clear vram plane-0
-CmdUpdPalette	  =  2.		; set palette, cursor, resolution, luminance
-CmdFixWait	  =  3.		; write PPU empty cycles count to CPU
-CmdRtiToCpu	  =  4.		; write PPU empty INTs count to CPU
-CmdSetVLines      =  5.		; set vlines table initial addr
-CmdDrawTile       =  6.		; draw 8pix tile data
-CmdBlackWhite     =  7.		; switch palette to white temporarily (exit was opened)
-CmdPrintCaveStr   =  8.		; print 'cave: x' string 
-CmdPrintDiamonds  =  9.		; print current diamonds score
-CmdPlaySound      = 10.		; plays sound
-CmdPrintMenu      = 11.		; print menu strings
-CmdUpdateMenu     = 12.		; update changeable menu items
+CmdUpdPalette	  =  2.		; set palette
+CmdUpdResolution  =  3.		; set resolution
+CmdFixWait	  =  4.		; write PPU empty cycles count to CPU
+CmdRtiToCpu	  =  5.		; write PPU empty INTs count to CPU
+CmdSetVLines      =  6.		; set vlines table initial addr
+CmdDrawTile       =  7.		; draw 8pix tile data
+CmdBlackWhite     =  8.		; switch palette to white temporarily (exit was opened)
+CmdPrintCaveStr   =  9.		; print 'cave: x' string 
+CmdPrintDiamonds  = 10.		; print current diamonds score
+CmdPlaySound      = 11.		; plays sound
+CmdPrintMenu      = 12.		; print menu strings
+CmdUpdateMenu     = 13.		; update changeable menu items
+CmdBlueLogo       = 14.		; set part of screen blue for logo
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Drawing 

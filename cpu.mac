@@ -64,7 +64,7 @@ MainCycle:
 	asl	R0
 	call	@MainCycleTable(R0)
 	; debug output
-	call	DebugInfo
+	;call	DebugInfo
 	jmp	MainCycle
 
 
@@ -91,7 +91,14 @@ MainReset:
 	call	WaitPpu
 	mov	#VFieldAddr, PpuR0
 	mov	#CmdSetVLines, PpuCommand
+	; set resolution 320x288
+	call	WaitPpu
+	mov	#^B0000000000010000, PpuR0
+	mov	#^B0000000000010111, PpuR1	; 320x288, max luminance (..000111-640 ..010111-320 ..100111-160 ..110111-80)
+	mov	#CmdUpdResolution, PpuCommand
 	; init vars
+	; draw logo
+	call	DrawLogo
 	; draw main menu
 	call	WaitPpu
 	mov	#CmdPrintMenu, PpuCommand
@@ -100,16 +107,29 @@ MainReset:
 	mov	NoSound, PpuR1
 	mov	#CmdUpdateMenu, PpuCommand
 	; start menu
-	mov	#1, VSyncX			; menu fps is 50. (for keys to be pressed normally)
+	mov	#1, VSyncX			; menu fps is 50. (for more better keypresses)
 	inc	CurrentMode
 	return
 
 ; 01 - main menu
 MainMenu:
-	; space - run game
+;	; animate logo
+;	bit	#^B11, FrameCount
+;	bne	02$
+;	call	AnimateLogo
+;02$:	; space - run game
 	tst	KeySpace
 	beq	10$
 	clr	KeySpace
+	; clear screen
+	call	WaitPpu
+	mov	#CmdClearScreen, PpuCommand
+	call	ClearScreen12
+	; set resolution 160x288
+	call	WaitPpu
+	mov	#^B0000000000010000, PpuR0
+	mov	#^B0000000000100111, PpuR1	; 160x288, max luminance (..000111-640 ..010111-320 ..100111-160 ..110111-80)
+	mov	#CmdUpdResolution, PpuCommand
 	mov	#6., VSyncX			; game fps are much slower than in menu
 	inc	CurrentMode
 	return
@@ -385,13 +405,9 @@ CheckColors:
 	bne	20$
 	mov	#^B1101110010011000, PpuR0 ; swap R&G bits
 	mov	#^B1111111010111010, PpuR1
-	mov	#^B0000000000010000, PpuR2
-	mov	#^B0000000000100111, PpuR3
 	br	90$
 20$:	mov	#^B1011101010011000, PpuR0 ; YRGB for 011 010 001 000
 	mov	#^B1111111011011100, PpuR1 ; YRGB for 111 110 101 100
-	mov	#^B0000000000010000, PpuR2 ; no cursor
-	mov	#^B0000000000100111, PpuR3 ; 160x288, max luminance
 90$:	mov	#CmdUpdPalette, PpuCommand
 99$:	return
 
@@ -482,6 +498,7 @@ tempVarsEnd:
 
 @include inc_cpu_levels.mac
 @include inc_cpu_sprites.mac
+@include inc_cpu_font.mac
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // PPU Main code

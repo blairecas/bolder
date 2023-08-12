@@ -55,19 +55,40 @@
     $f = fopen ("inc_ppu_font.mac", "w");
     fputs($f, "FontPpuData:\n");
     $n=0;
-    for ($t=0; $t<$last_tile; $t++)
+    // 42 font chars
+    for ($t=0; $t<=42; $t++)
     {
-	    $tile = $tilesArray[$t];
+        $tile = $tilesArray[$t];
+       	for ($i=0; $i<8; $i++)
+        {
+   	        if ($n==0) fputs($f, "\t.byte\t");
+            $bb = ($tile[$i] & 0xFF);
+            fputs($f, decoct($bb));
+            $n++; if ($n<8) fputs($f, ", "); else { $n=0; fputs($f, "\n"); }
+        }
+    }
+    if ($n != 0) fputs($f, "\n");
+    fputs($f, "\t.even\n\n");
+    fclose($f);
+
+    echo "Writing CPU logo characters data ...\n";
+    $f = fopen ("inc_cpu_font.mac", "w");
+    fputs($f, "FontCpuData:\n");
+    $n=0;
+    // 43-54 CPU font chars
+    for ($t=43; $t<=54; $t++)
+    {
+        $tile = $tilesArray[$t];
     	for ($i=0; $i<8; $i++)
 	    {
-    	    if ($n==0) fputs($f, "\t.byte\t");
-	        $bb = ($tile[$i] & 0xFF);
-	        fputs($f, decoct($bb));
+    	    if ($n==0) fputs($f, "\t.word\t");
+	        $ww = ($tile[$i] >> 8);
+	        fputs($f, decoct($ww));
 	        $n++; if ($n<8) fputs($f, ", "); else { $n=0; fputs($f, "\n"); }
         }
     }
     fputs($f, "\n");
-    fputs($f, "\t.even\n\n");
     fclose($f);
+
 
 ?>

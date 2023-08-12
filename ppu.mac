@@ -88,17 +88,19 @@ CmdPro:	mov	#PpuCommand/2, @#177010
 CommandsTable:
 	.word	Error			; 00. can't be
 	.word	ClearScreen		; 01. clear screen plane-0
-	.word	PalUpd			; 02. set palette, cursor, resolution, luminance (R0,R1 - palette, R2,R3 - cursor, resolution, lumi)
-	.word	FxWait			; 03. write empty cycles count to CPU
-	.word	ReqRcn			; 04. write empty INTs count to CPU
-	.word	SetVLines		; 05. set vlines table initial vaddr
-	.word	DrawTile		; 06. draw 8pix tile
-	.word	BlackWhite		; 07. switch palette to white temporaroly (exit was opened)
-	.word	PrintCaveStr		; 08. print 'cave: x' string
-	.word	PrintDiamonds		; 09. print current diamonds score
-	.word	PlaySound		; 10. plays sound
-	.word	PrintMenu		; 11. print menu strings
-	.word	UpdateMenu		; 12. update changeable menu items
+	.word	PalUpdate		; 02. set palette
+	.word	ResUpdate		; 03. set resolution
+	.word	FxWait			; 04. write empty cycles count to CPU
+	.word	ReqRcn			; 05. write empty INTs count to CPU
+	.word	SetVLines		; 06. set vlines table initial vaddr
+	.word	DrawTile		; 07. draw 8pix tile
+	.word	BlackWhite		; 08. switch palette to white temporaroly (exit was opened)
+	.word	PrintCaveStr		; 09. print 'cave: x' string
+	.word	PrintDiamonds		; 10. print current diamonds score
+	.word	PlaySound		; 11. plays sound
+	.word	PrintMenu		; 12. print menu strings
+	.word	UpdateMenu		; 13. update changeable menu items
+	.word	BlueLogo		; 14. set part of screen blue for logo
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -125,7 +127,7 @@ CleaUp:	mov	#END, R0
 	sob	R2, .-2
 	return
 
-; 01: clear screen plane 0
+; clear screen plane 0
 ClearScreen:
 	mov	#VADDR, R5
 	mov	#SCRWID*384./2, R3		; total 384. lines
@@ -133,23 +135,28 @@ ClearScreen:
 	sob	R3, 10$
 	return
 	
-; 02: pallete, resolution, cursor, luminance change
-PalUpd:	mov	#VLinesBegin, R5
+; pallete update
+PalUpdate:
+	mov	#VLinesBegin, R5
 	mov	R0, (R5)+
 	mov	R1, (R5)+
-	cmp	(R5)+, (R5)+
-	mov	R2, (R5)+
-	mov	R3, (R5)
 	return
 
-; 04: write empty cycles count to CPU
+; resolution update
+ResUpdate:
+	mov	#VLinesBegin+8., R5
+	mov	R0, (R5)+
+	mov	R1, (R5)+
+	return
+
+; write empty cycles count to CPU
 WaiPP0:	.word	0		; PPU wait cycles counter
 FxWait:	mov	#<PpuWaitCount/2>, @#177010
 	mov	WaiPP0, @#177014
 	clr	WaiPP0
 	return
 
-; 05: request RTICNT to CPU
+; request RTICNT to CPU
 ReqRcn:	mov	#<PpuRtiCount2/2>, @#177010
 	mov	RTICNT, @#177014
 	return
