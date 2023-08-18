@@ -75,7 +75,7 @@ SetVLines:
 	sob	R3, 10$
 	; emustudio fix - not needed on real UKNC
 	.rept	10.
-	mov	#136000, (R1)+	
+	mov	#56000, (R1)+	
 	inc	R1
 	inc	R1
 	.endr
