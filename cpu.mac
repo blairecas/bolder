@@ -89,16 +89,29 @@ MainReset:
 	clr	NewFieldX
 	clr	NewFieldY
 	call	WaitPpu
-	mov	#VFieldAddr, PpuR0
-	mov	#CmdSetVLines, PpuCommand
+	mov	#VFieldAddr*2, PpuR0
+	mov	#CmdResetVlines, PpuCommand
 	; set resolution 320x288
 	call	WaitPpu
 	mov	#^B0000000000010000, PpuR0
 	mov	#^B0000000000010111, PpuR1	; 320x288, max luminance (..000111-640 ..010111-320 ..100111-160 ..110111-80)
 	mov	#CmdUpdResolution, PpuCommand
 	; init vars
-	; draw logo
+	; draw 4 logos in vram
+	clr	R0
+	mov	#100000, R1
 	call	DrawLogo
+	mov	#1, R0
+	mov	#120000, R1
+	call	DrawLogo
+	mov	#2, R0
+	mov	#140000, R1
+	call	DrawLogo
+	mov	#3, R0
+	mov	#160000, R1
+	call	DrawLogo
+	clr	FrameCount
+	call	AnimateLogo
 	; draw main menu
 	call	WaitPpu
 	mov	#CmdPrintMenu, PpuCommand
@@ -107,20 +120,27 @@ MainReset:
 	mov	NoSound, PpuR1
 	mov	#CmdUpdateMenu, PpuCommand
 	; start menu
+	call	WaitPpu
+	mov	#1, PpuR0
+	mov	#CmdMusStart, PpuCommand
 	mov	#1, VSyncX			; menu fps is 50. (for more better keypresses)
 	inc	CurrentMode
 	return
 
 ; 01 - main menu
 MainMenu:
-;	; animate logo
-;	bit	#^B11, FrameCount
-;	bne	02$
-;	call	AnimateLogo
-;02$:	; space - run game
+	; animate logo
+	bit	#^B1, FrameCount
+	bne	02$
+	call	AnimateLogo
+02$:	; space - run game
 	tst	KeySpace
 	beq	10$
 	clr	KeySpace
+	; stop music of any
+	call	WaitPpu
+	clr	PpuR0
+	mov	#CmdMusStart, PpuCommand
 	; clear screen
 	call	WaitPpu
 	mov	#CmdClearScreen, PpuCommand
@@ -131,6 +151,10 @@ MainMenu:
 	mov	#^B0000000000100111, PpuR1	; 160x288, max luminance (..000111-640 ..010111-320 ..100111-160 ..110111-80)
 	mov	#CmdUpdResolution, PpuCommand
 	mov	#6., VSyncX			; game fps are much slower than in menu
+	; reset vlines again
+	call	WaitPpu
+	mov	#VFieldAddr*2, PpuR0
+	mov	#CmdResetVlines, PpuCommand
 	inc	CurrentMode
 	return
 10$:	; left - decrease level
@@ -421,12 +445,10 @@ ClearTempVars:
 
 ; clear screen planes 1 and 2
 ClearScreen12:
-	call	SetVreg
-	mov	#100000, (R4)
-	mov	#40000, R3
-	clr	(R5)
-	inc	(R4)
-	sob	R3, .-4
+	mov	#VADDR*2, R5		; now screen buffer in lower RAM, so *2
+	mov	#40000, R3		; little more than needed, but it's ok
+	clr	(R5)+
+	sob	R3, .-2
 	return
 
 ; //////////////////////////////////////////////////////////////////////////////

@@ -16,16 +16,19 @@ CmdPlaySound      = 11.		; plays sound
 CmdPrintMenu      = 12.		; print menu strings
 CmdUpdateMenu     = 13.		; update changeable menu items
 CmdBlueLogo       = 14.		; set part of screen blue for logo
+CmdMusStart       = 15.		; start music
+CmdResetVlines    = 16.		; reset vlines after messing up with logo
+CmdAnimateLogo    = 17.		; animate logo with vlines
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Drawing 
 ; //////////////////////////////////////////////////////////////////////////////
 
-VADDR  = 100000			; lines table first line pointing to
+VADDR  = 20000			; 100000 ; lines table first line pointing to
 SCRWID = 40.			; screen width in 8-pix
 SCRHEI = 288.			; screen height
 
-VFieldAddr = 102400
+VFieldAddr = 22400		; 102400
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Objects

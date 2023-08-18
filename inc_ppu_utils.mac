@@ -48,9 +48,22 @@ PrintStr:
 ; // Drawing 
 ; ////////////////////////////////////////////////////////////////////
 
+; first 32 lines are from addr VADDR
+ResetVlines:
+	mov	#VlinesTable, R1
+	mov	#VADDR, R2
+	mov	#32., R3
+10$:	mov	R2, (R1)+
+	inc	R1
+	inc	R1
+	add	#SCRWID, R2
+	sob	R3, 10$
+
 ; set vlines table initial vaddr (and adjust lines)
-; R0 - vaddr
+; R0 - vaddr*2
 SetVLines:
+	clc	
+	ror	R0
 	mov	#VLinesField, R1
 	mov	#256./4, R3
 10$:	.rept	4
@@ -69,16 +82,16 @@ SetVLines:
 	return
 
 
-; R0 - vaddr, R1 - tile #
+; R0 - vaddr *2 for PPU, R1 - tile #
 DrawTile:
-	call	SetVreg
-	mov	R0, (R4)
+	clc
+	ror	R0
 	ash	#4., R1			; *16 (tile size in ppu)
 	add	#TilesPpuData, R1
 	mov	#SCRWID, R2		; vaddr addition
 	.rept	16.
-	movb	(R1)+, (R5)
-	add	R2, (R4)
+	movb	(R1)+, (R0)
+	add	R2, R0
 	.endr
 	return
 
@@ -229,8 +242,24 @@ UpdateMenu:
 
 ; part of screen need be with filled plane-0
 BlueLogo:
-	mov	#VADDR, R0
-	mov	#8.*17.*20., R3
+	mov	#100000, R0
+	mov	#76000/2, R3
 	mov	#177777, (R0)+
 	sob	R3, .-4
+	return
+
+
+; animate logo
+; R0 - animation #
+AnimateLogo:
+	swab	R0
+	ash	#5, R0
+	add	#100000, R0
+	mov	#VlinesTable, R1
+	mov	#17.*8., R3
+10$:	mov	R0, (R1)+
+	inc	R1
+	inc	R1
+	add	#SCRWID, R0
+	sob	R3, 10$
 	return

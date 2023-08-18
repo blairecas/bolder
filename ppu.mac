@@ -52,6 +52,7 @@ PPUMain:
 ; //////////////////////////////////////////////////////////////////////////////
 
 MainCycle:
+	call	MusPro
 	call	CmdPro
 	br	MainCycle
 
@@ -101,6 +102,9 @@ CommandsTable:
 	.word	PrintMenu		; 12. print menu strings
 	.word	UpdateMenu		; 13. update changeable menu items
 	.word	BlueLogo		; 14. set part of screen blue for logo
+	.word	MusStart		; 15. start music
+	.word	ResetVlines		; 16. reset vlines after messing up with logo
+	.word	AnimateLogo		; 17. animate logo with vlines
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -220,6 +224,104 @@ SoundIntNext:
 	tst	@#177714
 	rti
 
+.radix 10
+
+; notes (TODO: need correction a bit, some notes are sounding not that right)
+NotPad:	.word	1000
+	.word	956, 902, 851, 804, 758, 716, 676, 638, 602, 568, 536, 506
+	.word	478, 451, 426, 402, 379, 358, 338, 319, 301, 284, 268, 253
+	.word	239, 225, 213, 201, 190, 179, 169, 159, 150, 145, 134, 127
+	.word	119, 113, 106, 100, 95,  89,  84,  80,  75,  73,  67,  63
+
+; C             D             E      F             G             A             B
+; C4-37  C#4-38 D4-39  D#4-40 E4-41  F4-42  F#4-43 G4-44  G#4-45 A4-46  A#4-47 B4-48
+; C3-25  C#3-26 D3-27  D#3-28 E3-29  F3-30  F#3-31 G3-32  G#3-33 A3-34  A#3-35 B3-36
+; C2-13  C#2-14 D2-15  D#2-16 E2-17  F2-18  F#2-19 G2-20  G#2-21 A2-22  A#2-23 B2-24
+; C1-01  C#1-02 D1-03  D#1-04 E1-05  F1-06  F#1-07 G1-08  G#1-09 A1-10  A#1-11 B1-12
+
+.radix 8
+
+MusCur:	.word	0
+
+; start music, R0 - music #
+MusStart:
+	mtps	#200			; stop interrupts
+	tstb	NoSound
+	bne	99$
+	call	TimerInit		; init pp timer
+	tst	R0			; 0 - stop music
+	bne	10$
+	clr	MusCur
+	br	99$
+10$:	asl	R0
+	mov	MusicTable(R0), R0	; addr from music table
+	movb	(R0), R1		; first note #
+	asl	R1
+	mov	NotPad(R1), @#177712	; initial counter
+	mov	R0, MusCur		; first note addr
+	mov	#<VSyncCount2/2>, @#177010
+	clr	@#177014
+	tst	@#177714
+	tst	@#177714
+	mov	#MusIntLo, @#304	; set music interrupt
+	mov	#^B01000101, @#177710	; allow int, start, timer = 8mks
+99$:	mtps	#0
+	return
+
+; mus processor
+MusPro:	tst	MusCur			; current note addr
+	bne	1$			; are we are playing?
+	return				; no - return
+1$:	mov	#<VSyncCount2/2>, @#177010
+	cmp	@#177014, #2		; was #2 vsync?
+	bhi	2$
+	return
+2$:	mov	#<VSyncCount2/2>, @#177010
+	clr	@#177014
+	; process new note
+	mtps	#200			; stop interrupts
+	inc	MusCur			; advance music note
+	movb	@MusCur, R1		; note #
+	beq	20$			; empty ID - stop playing
+	bmi	10$			; empty note
+	asl	R1
+	mov	NotPad(R1), R1		; note delays initial
+	mov	R1, MusCountHi+2
+	mov	R1, MusCountLo+2
+	mov	#200, MusIntHi+2	; set #200 in high in case we cleared it
+	mov	R1, @#177712		; set music interrupt timer
+	tst	@#177714		; maybe better way here is  
+	tst	@#177714		; TST @#177714, BNE .-4
+	br	99$
+10$:	; stop ticking beeper
+	clr	MusIntHi+2		; clear #200 - so it will not tick high
+	br	99$
+20$:	; stop playing
+	call	TimerInit		; init PP timer
+	clr	MusCur			; music is stopped
+99$:	mtps	#0
+	return
+
+; timer interrupts (for tones)
+MusIntLo:
+	clr	@#177716		; tick low level
+	mov	#MusIntHi, @#304	; set next interrupt to high-level version
+MusCountLo:
+	mov	#000000, @#177712	; set new timer as duty changed
+	add	#2, MusCountLo+2	; change duty
+	tst	@#177714		; TWO (!) times is important I think
+	tst	@#177714
+	rti
+; same as above just for high signal level
+MusIntHi:
+	mov	#200, @#177716		; (!) self-modifying 
+	mov	#MusIntLo, @#304
+MusCountHi:
+	mov	#000000, @#177712
+	sub	#2, MusCountHi+2	; do we need to test it for close to 0?
+	tst	@#177714
+	tst	@#177714
+	rti		
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // KEYBOARD
@@ -416,6 +518,55 @@ Sound006:
 	.word	0
 
 
+MusicTable:
+	.word	0, Music001
+
+; C              D              E      F              G              A              B
+; C4-37  C#4-38  D4-39  D#4-40  E4-41  F4-42  F#4-43  G4-44  G#4-45  A4-46  A#4-47  B4-48
+; C3-25  C#3-26  D3-27  D#3-28  E3-29  F3-30  F#3-31  G3-32  G#3-33  A3-34  A#3-35  B3-36
+; C2-13  C#2-14  D2-15  D#2-16  E2-17  F2-18  F#2-19  G2-20  G#2-21  A2-22  A#2-23  B2-24
+; C1-01  C#1-02  D1-03  D#1-04  E1-05  F1-06  F#1-07  G1-08  G#1-09  A1-10  A#1-11  B1-12
+
+Music001:
+	.byte	15, -1, 19, -1, 22, -1, 27, -1
+	.byte	17, -1, 20, -1, 22, -1, 29, -1
+	.byte	23, -1, 25, -1, 27, -1, 30, -1
+	.byte	25, -1, 36, -1, 26, -1, 34, -1
+	.byte	15, -1, 27, -1, 10, -1, 17, -1
+	.byte	13, -1, 29, -1, 17, -1, 13, -1
+	.byte	15, -1, 27, -1, 10, -1, 17, -1
+	.byte	23, -1, 27, -1, 23, -1, 13, -1
+	.byte	25, -1, 08, -1, 15, -1, 21, -1
+	.byte	37, -1, 25, -1, 21, -1, 10, -1
+	.byte	26, -1, 12, -1, 27, -1, 20, -1
+	.byte	20, -1, 20, -1, 32, -1, 20, -1
+	.byte	03, -1, 03, -1, 03, -1, 03, -1
+	.byte	15, -1, 15, -1, 03, -1, 03, -1
+	.byte	01, -1, 01, -1, 01, -1, 01, -1
+	.byte	13, -1, 13, -1, 01, -1, 01, -1
+
+	.byte	 3, -1,  3, -1, 31, -1,  3, -1
+	.byte	32, -1, 15, -1, 31, -1,  3, -1
+	.byte	32, -1,  1, -1, 31, -1,  1, -1
+	.byte	32, -1, 13, -1, 29, -1,  1, -1
+
+	.byte	30, -1, 27, -1, 39, -1, 27, -1
+	.byte	37, -1, 27, -1, 36, -1, 27, -1
+	.byte	34, -1, 25, -1, 37, -1, 25, -1
+	.byte	37, -1, 25, -1, 32, -1, 25, -1
+
+	.byte	37, -1,  3, -1, 31, -1,  3, -1
+	.byte	32, -1, 15, -1, 31, -1,  3, -1
+	.byte	32, -1,  1, -1, 31, -1,  1, -1
+	.byte	32, -1, 13, -1, 29, -1,  1, -1
+
+	.byte	30, -1, 31, -1, 27, -1, 22, -1
+	.byte	19, -1, 29, -1, 25, -1, 20, -1
+	.byte	13, -1, 31, -1, 27, -1, 22, -1
+	.byte	19, -1, 29, -1, 25, -1, 20, -1
+
+	.byte	0
+	.even
 
 .radix 8
 

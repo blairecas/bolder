@@ -4,7 +4,7 @@
 	// part of videolines table in PPU
 	//
 	fputs($f, "\nVLinesTable:\n");
-	$vaddr = 0100000;
+	$vaddr = 020000;
 	$paddr_start = 01130;
 	$paddr = $paddr_start + 4;
 	$col = 0;
