@@ -12,5 +12,7 @@
         "editor.codeLens": false,
 	"editor.detectIndentation": false,
 	"explorer.sortOrder": "type",
-	"editor.wordBasedSuggestions": false
+	"editor.wordBasedSuggestions": "off",
+	"files.autoGuessEncoding": false,
+	"files.encoding": "koi8r"	
 }

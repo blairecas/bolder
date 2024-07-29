@@ -424,7 +424,6 @@ CheckColors:
 	tst	KeyK1
 	beq	99$
 	clr	KeyK1
-	call	WaitPpu
 	com	RgbMode
 	bne	20$
 	mov	#^B1101110010011000, PpuR0 ; swap R&G bits
@@ -432,7 +431,9 @@ CheckColors:
 	br	90$
 20$:	mov	#^B1011101010011000, PpuR0 ; YRGB for 011 010 001 000
 	mov	#^B1111111011011100, PpuR1 ; YRGB for 111 110 101 100
-90$:	mov	#CmdUpdPalette, PpuCommand
+90$:	call	WaitPpu
+	mov	#CmdUpdPalette, PpuCommand
+	call	WaitPpu
 99$:	return
 
 ; clear temp vars

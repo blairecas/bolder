@@ -35,7 +35,7 @@ PPUMain:
 	bic	#^B0000001000000000, @#177054	; disable vsync in PPU
 	bis	#^B0000000100000000, @#177054	; enable vsync in CPU
 	call	TimerInit		; init pp timer
-	bic	#200, @#177716		; turn off sound generator
+	clr	@#177716		; turn off sound generator
 
 	; set interrupts
 	mov	#INTKeyboard,  @#300	; keyboard interrupt
@@ -304,7 +304,7 @@ MusPro:	tst	MusCur			; current note addr
 
 ; timer interrupts (for tones)
 MusIntLo:
-	clr	@#177716		; tick low level
+	bic	#200, @#177716		; tick low level
 	mov	#MusIntHi, @#304	; set next interrupt to high-level version
 MusCountLo:
 	mov	#000000, @#177712	; set new timer as duty changed
@@ -314,7 +314,7 @@ MusCountLo:
 	rti
 ; same as above just for high signal level
 MusIntHi:
-	mov	#200, @#177716		; (!) self-modifying 
+	bis	#200, @#177716		; (!) self-modifying 
 	mov	#MusIntLo, @#304
 MusCountHi:
 	mov	#000000, @#177712
