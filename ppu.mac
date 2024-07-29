@@ -15,10 +15,10 @@
 ; ///////////////////////////////////////////////////////////
 
 PPUMain:
-	mov	#1000, SP		; stack is 540..1000
-	mov	#361, @#177054		; set ROM banks as VRAM
-	call	CleaUp			; clear upper RAM	
-	mov	#100000, R0		; clear vram plane 0
+	mov	#1000, SP			; stack is 540..1000
+	mov	#361, @#177054			; set ROM banks as VRAM
+	call	CleaUp				; clear upper RAM	
+	mov	#100000, R0			; clear vram plane 0
 	mov	#177000-100000/2, R3
 	clr	(R0)+
 	sob	R3, .-2
@@ -28,24 +28,24 @@ PPUMain:
 	cmp     #177777, @#177014
 	bne	.-14
 
-	clr	@#177026		; allow write to all planes (for font output)
-	bic	#107, @#177066		; turn off interrupt on CPU-PPU channels
+	clr	@#177026			; allow write to all planes (for font output)
+	bic	#107, @#177066			; turn off interrupt on CPU-PPU channels
 	
 	; timers
 	bic	#^B0000001000000000, @#177054	; disable vsync in PPU
 	bis	#^B0000000100000000, @#177054	; enable vsync in CPU
-	call	TimerInit		; init pp timer
-	clr	@#177716		; turn off sound generator
+	bic	#^B0001111110000000, @#177716	; sound init (mixer off)
+	call	TimerInit			; init pp timer
 
 	; set interrupts
-	mov	#INTKeyboard,  @#300	; keyboard interrupt
-	bis	#100, @#177700		; allow keyboard interrupts	
+	mov	#INTKeyboard,  @#300		; keyboard interrupt
+	bis	#100, @#177700			; allow keyboard interrupts	
 
         ; acknowledge start of phase 3
 	mov	#PpuCommand/2, @#177010
 	clr	@#177014
 
-	mtps	#0			; allow interrupts
+	mtps	#0				; allow interrupts
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // MAIN PPU CYCLE
