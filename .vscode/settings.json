@@ -14,5 +14,5 @@
 	"explorer.sortOrder": "type",
 	"editor.wordBasedSuggestions": "off",
 	"files.autoGuessEncoding": false,
-	"files.encoding": "koi8r"	
+	"files.encoding": "windows1251"	
 }
