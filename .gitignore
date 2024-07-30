@@ -1,3 +1,4 @@
+*.log
 *.lst
 *.obj
 *.dat

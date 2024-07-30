@@ -195,7 +195,6 @@ PlaySound:
 	mov	R0, SoundAddr
 	mov	R1, @#177712		; load counter
 	tst	@#177714
-	tst	@#177714
 	bic	#200, @#177716		; sound to LO
 	mov	#SoundIntHi, @#304	; set sound interrupt to HI
 	mov	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
@@ -217,10 +216,8 @@ SoundIntNext:
 	beq	90$			; end of sound?
 	add	#2, SoundAddr
 	tst	@#177714
-	tst	@#177714
 	rti
 90$:	clr	@#177710		; stop timer and ints
-	tst	@#177714
 	tst	@#177714
 	rti
 
@@ -262,7 +259,6 @@ MusStart:
 	mov	#<VSyncCount2/2>, @#177010
 	clr	@#177014
 	tst	@#177714
-	tst	@#177714
 	mov	#MusIntLo, @#304	; set music interrupt
 	mov	#^B01000101, @#177710	; allow int, start, timer = 8mks
 99$:	mtps	#0
@@ -291,7 +287,6 @@ MusPro:	tst	MusCur			; current note addr
 	mov	#200, MusIntHi+2	; set #200 in high in case we cleared it
 	mov	R1, @#177712		; set music interrupt timer
 	tst	@#177714		; maybe better way here is  
-	tst	@#177714		; TST @#177714, BNE .-4
 	br	99$
 10$:	; stop ticking beeper
 	clr	MusIntHi+2		; clear #200 - so it will not tick high
