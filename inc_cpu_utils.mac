@@ -29,16 +29,15 @@ PPSEN:	mov	#PPMSG, R0		; array address
 ; R4 - start addr in CPU
 ; R5 - length / 2
 PPRUN:	movb	#1, PPCMD		; 1 - allocate memory
-	mov	R5, PPLEN
+	mov	R5, PPACP		; (!) length for allocate is in PPACP, not in PPLEN
 	call	PPSEN			
 	; (!) warn - no testing for success (!)
 	movb	#20, PPCMD		; 20 - write to PPU mem
-	mov	R5, PPLEN
 	mov 	R4, PPACP
+	mov	R5, PPLEN
 	call	PPSEN
 	movb	#30, PPCMD		; 30 - run
-	call	PPSEN
-	return 
+	br	PPSEN
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // PPU Loader

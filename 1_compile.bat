@@ -37,7 +37,19 @@ echo ===========================================================================
 echo Linking and cleanup
 echo ===========================================================================
 php -f ../scripts/lst2bin.php _cpu.lst ./release/bolde2.sav sav
+if %ERRORLEVEL% NEQ 0 ( exit /b )
+
 ..\scripts\rt11dsk d bolder.dsk .\release\bolde2.sav >NUL
 ..\scripts\rt11dsk a bolder.dsk .\release\bolde2.sav >NUL
+
+..\scripts\rt11dsk d ..\..\03_dsk\hdd.dsk .\release\bolde2.sav >NUL
+..\scripts\rt11dsk a ..\..\03_dsk\hdd.dsk .\release\bolde2.sav >NUL
+
+del _cpu.lst
+del _cpu.mac
+del _ppu.lst
+del _ppu.mac
+
+@2_run_ukncbtl.bat
 
 echo.
