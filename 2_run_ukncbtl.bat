@@ -1,1 +1,1 @@
-start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\bolder\bolder.dsk /boot1
+start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\bolder\release\bolde2.dsk /boot1

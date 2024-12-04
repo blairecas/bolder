@@ -39,10 +39,10 @@ echo ===========================================================================
 php -f ../scripts/lst2bin.php _cpu.lst ./release/bolde2.sav sav
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 
-..\scripts\rt11dsk d bolder.dsk .\release\bolde2.sav >NUL
-..\scripts\rt11dsk a bolder.dsk .\release\bolde2.sav >NUL
+..\scripts\rt11dsk d .\release\bolde2.dsk bolde2.sav >NUL
+..\scripts\rt11dsk a .\release\bolde2.dsk .\release\bolde2.sav >NUL
 
-..\scripts\rt11dsk d ..\..\03_dsk\hdd.dsk .\release\bolde2.sav >NUL
+..\scripts\rt11dsk d ..\..\03_dsk\hdd.dsk bolde2.sav >NUL
 ..\scripts\rt11dsk a ..\..\03_dsk\hdd.dsk .\release\bolde2.sav >NUL
 
 del _cpu.lst
